@@ -913,3 +913,27 @@ html, body {
   box-shadow: inset 0 0 120px 30px color-mix(in srgb, var(--c) 70%, transparent), inset 0 0 0 8px color-mix(in srgb, var(--c) 55%, transparent);
   animation: ls-glow-pulse var(--ls-fx-ms) ease-in-out both; }
 @keyframes ls-glow-pulse { 0% { opacity: 0; } 20% { opacity: 1; } 45% { opacity: 0.55; } 65% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ===== 舞台动作：横幅 / 进度条 ===== */
+
+/* 横幅：右上角往下摞，弹出来 */
+.ls-banners { position: absolute; top: 24px; right: 24px; z-index: 70; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: none; }
+.ls-banner { position: relative; max-width: 46vw; padding: 14px 20px 12px; border-radius: 14px;
+  background: color-mix(in srgb, var(--ls-accent, #f472b6) 18%, rgba(10, 8, 16, 0.82));
+  border: 1px solid color-mix(in srgb, var(--ls-accent, #f472b6) 55%, transparent);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35); backdrop-filter: blur(6px);
+  animation: ls-banner-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+@keyframes ls-banner-pop { from { transform: translateX(40px) scale(0.92); opacity: 0; } to { transform: none; opacity: 1; } }
+.ls-banner-title { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; color: var(--ls-fg, #fff); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
+.ls-banner-text { margin-top: 4px; font-size: 14px; color: color-mix(in srgb, var(--ls-fg, #fff) 78%, transparent); }
+
+/* 进度条：底部中间，可以叠几条 */
+.ls-progress-wrap { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.ls-progress { display: flex; align-items: center; gap: 10px; min-width: 260px; max-width: 52vw; padding: 8px 14px; border-radius: 999px;
+  background: rgba(10, 8, 16, 0.72); border: 1px solid color-mix(in srgb, var(--ls-accent, #f472b6) 40%, transparent); backdrop-filter: blur(4px); }
+.ls-progress-label { font-size: 13px; color: color-mix(in srgb, var(--ls-fg, #fff) 82%, transparent); white-space: nowrap; }
+.ls-progress-track { flex: 1; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.ls-progress-fill { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--ls-accent, #f472b6), color-mix(in srgb, var(--ls-accent, #f472b6) 55%, #fff));
+  transition: width 0.35s ease; }
+.ls-progress-value { font-size: 13px; font-weight: 600; color: var(--ls-fg, #fff); white-space: nowrap; min-width: 3em; text-align: right; }

@@ -3,7 +3,7 @@
  * 唯一往回发的是「这句念完了」（出声的页面才发；预览页静音、不回执）。
  */
 
-import type { BrainState, CharacterManifest, GameSource, GameStatus, StageEvent, StageLiveEvent, StageOrder, StageUser, TemplateManifest } from './protocol';
+import type { BrainState, CharacterManifest, GameSource, GameStatus, StageAction, StageEvent, StageLiveEvent, StageOrder, StageUser, TemplateManifest } from './protocol';
 import { type FxEvent, giftTier, pick, triggersOf } from './triggers';
 
 export interface ChatRow {
@@ -42,6 +42,40 @@ export interface Media {
   from: number;
   until: number;
   at: number;
+}
+
+/** 正在放的音频（play_audio）：id 是身份，stop_audio 按它停 */
+export interface ActiveAudio {
+  id: string;
+  src: string;
+  channel: 'music' | 'sfx' | 'ambient';
+  title?: string;
+  loop?: boolean;
+  volume?: number;
+  duckOnTalk?: boolean;
+  from?: number;
+}
+
+/** 一次性音效（play_sfx）：key 是舞台侧编号，放完就撤 */
+export interface SfxItem {
+  key: string;
+  src: string;
+  volume?: number;
+}
+
+/** 横幅（show_banner）：ms 到点由舞台自动撤 */
+export interface StageBanner {
+  id: string;
+  title: string;
+  text?: string;
+}
+
+/** 进度条（set_progress） */
+export interface StageProgress {
+  id: string;
+  label?: string;
+  value: number;
+  total?: number;
 }
 
 export interface Line {
@@ -146,6 +180,16 @@ export interface StageState {
   game: GameSource | null;
   /** 游戏画面上那一行「她在干嘛」 */
   gameStatus: GameStatus | null;
+  /** 正在放的音频（动作事件流 play_audio）：id → 音频 */
+  audio: Record<string, ActiveAudio>;
+  /** 一次性音效（play_sfx），按出现顺序，最多留最近 8 条 */
+  sfx: SfxItem[];
+  /** 横幅（show_banner）：id → 横幅 */
+  banners: Record<string, StageBanner>;
+  /** 进度条（set_progress）：id → 进度 */
+  progress: Record<string, StageProgress>;
+  /** 显式场景（set_scene）：空 = 让媒体自动决定布局 */
+  scene: 'chat' | 'video' | 'game' | null;
 }
 
 const MAX_CHATS = 30;
@@ -207,7 +251,7 @@ function startUpdating(): void {
 let state: StageState = {
   connected: false, character: null, template: null, brain: 'off', brainDetail: '', line: null, lineEndedAt: 0,
   chats: [], alerts: [], focus: new Set(), reply: [], replySeq: 0, onAir: false, needsClick: false,
-  phase: wasUpdating() ? 'updating' : 'waiting', stats: freshStats(), tokens: 0, model: '', term: [], media: null, board: '', orders: [], notice: '', game: null, gameStatus: null, fx: [], reaction: null,
+  phase: wasUpdating() ? 'updating' : 'waiting', stats: freshStats(), tokens: 0, model: '', term: [], media: null, board: '', orders: [], notice: '', game: null, gameStatus: null, fx: [], reaction: null, audio: {}, sfx: [], banners: {}, progress: {}, scene: null,
 };
 const subscribers = new Set<() => void>();
 
@@ -483,6 +527,63 @@ function onBrain(event: Extract<StageEvent, { type: 'brain' }>): void {
   if (event.state !== 'off' && !state.onAir && !roomSeen) onAirChanged(true);
 }
 
+// —— 动作事件流（type: 'action'）：舞台把动作渲染出来。switch 是穷举的，不认识的 name 静默跳过（旧舞台不崩） ——
+let sfxSeq = 0;
+const bannerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const progressTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
+  const next = { ...map };
+  delete next[key];
+  return next;
+}
+
+/** 自动撤：show/set 之后 ms 毫秒把这条从 state 里拿走（同 id 再来一次会重置计时） */
+function autoDismiss(timers: Map<string, ReturnType<typeof setTimeout>>, id: string, ms: number | undefined, done: () => void): void {
+  const old = timers.get(id);
+  if (old) clearTimeout(old);
+  if (ms === undefined) return;
+  timers.set(id, setTimeout(() => {
+    timers.delete(id);
+    done();
+  }, ms));
+}
+
+function onAction(event: Extract<StageEvent, { type: 'action' }>): void {
+  const { action } = event;
+  switch (action.name) {
+    case 'play_audio':
+      return update((s) => ({ ...s, audio: { ...s.audio, [action.id]: { id: action.id, src: action.src, channel: action.channel, title: action.title, loop: action.loop, volume: action.volume, duckOnTalk: action.duckOnTalk, from: action.from } } }));
+    case 'stop_audio':
+      return update((s) => (action.id in s.audio ? { ...s, audio: withoutKey(s.audio, action.id) } : s));
+    case 'play_video': {
+      const { id, title, up, src, from, until } = action;
+      return update((s) => term({ ...s, media: { id, title, up, src, from, until, at: event.at } }, 'video', `放视频：${short(title, 24)}`));
+    }
+    case 'stop_video':
+      return update((s) => (s.media?.id === action.id ? { ...s, media: null } : s));
+    case 'set_scene':
+      return update((s) => term({ ...s, scene: action.scene }, 'scene', action.label ? `切到 ${action.label}` : `切到 ${action.scene}`));
+    case 'play_sfx':
+      return update((s) => ({ ...s, sfx: [...s.sfx, { key: `sfx${++sfxSeq}`, src: action.src, volume: action.volume }].slice(-8) }));
+    case 'show_banner':
+      autoDismiss(bannerTimers, action.id, action.ms, () => update((s) => (action.id in s.banners ? { ...s, banners: withoutKey(s.banners, action.id) } : s)));
+      return update((s) => ({ ...s, banners: { ...s.banners, [action.id]: { id: action.id, title: action.title, text: action.text } } }));
+    case 'dismiss_banner':
+      return update((s) => (action.id in s.banners ? { ...s, banners: withoutKey(s.banners, action.id) } : s));
+    case 'set_progress':
+      autoDismiss(progressTimers, action.id, action.ms, () => update((s) => (action.id in s.progress ? { ...s, progress: withoutKey(s.progress, action.id) } : s)));
+      return update((s) => ({ ...s, progress: { ...s.progress, [action.id]: { id: action.id, label: action.label, value: action.value, total: action.total } } }));
+    case 'clear_progress':
+      return update((s) => (action.id in s.progress ? { ...s, progress: withoutKey(s.progress, action.id) } : s));
+  }
+}
+
+/** 音效放完，舞台侧把它从列表里撤掉（组件在 onended 里调） */
+export function dropSfx(key: string): void {
+  update((s) => (s.sfx.some((f) => f.key === key) ? { ...s, sfx: s.sfx.filter((f) => f.key !== key) } : s));
+}
+
 function handle(event: StageEvent): void {
   switch (event.type) {
     case 'hello':
@@ -530,6 +631,7 @@ function handle(event: StageEvent): void {
     case 'notice': return update((s) => ({ ...s, notice: event.text }));
     case 'game': return update((s) => ({ ...s, game: event.source, ...(event.source ? {} : { gameStatus: null }) }));
     case 'gameStatus': return update((s) => ({ ...s, gameStatus: event.status }));
+    case 'action': return onAction(event);
     case 'note': return update((s) => term(s, event.tag, event.text));
   }
 }

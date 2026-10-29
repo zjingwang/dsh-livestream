@@ -91,6 +91,7 @@ interface HostState {
   broadcast: BroadcastStatus;
   settings: { roomId: number | null; character: string; template: string; voice: string; stagePort: number; idleAfterSec: number; gameChatGapSec?: number; distillModel: string; ownRooms: number[]; broadcast: boolean; areaId: number | null; liveTitle: string; pushProtocol: 'srt' | 'rtmp'; streamKbps: number; asrPython: string; asrModel: string; boardText: string; noticeText?: string; pace?: { welcomeSec?: number | 'off'; thanksSec?: number; followSec?: number; chatPicks?: number }; blocked?: BlockedViewer[] };
   stageUrl: string;
+  toneUrl: string;
   characters: PackEntry[];
   templates: PackEntry[];
   asr: { available: boolean };
@@ -275,7 +276,7 @@ export function Console() {
   const [room, setRoom] = useState('');
   const [copied, setCopied] = useState(false);
   const [drawer, setDrawer] = useState(false);
-  const [dock, setDock] = useState<'owner' | 'sim'>('owner');
+  const [dock, setDock] = useState<'owner' | 'sim' | 'action'>('owner');
   const previewRef = useRef<HTMLDivElement>(null);
   const secrets = useSecrets();
 
@@ -423,9 +424,10 @@ export function Console() {
               <nav className="dl-tabs">
                 <button className={dock === 'owner' ? 'dl-on' : ''} onClick={() => setDock('owner')}>跟她说话</button>
                 <button className={dock === 'sim' ? 'dl-on' : ''} onClick={() => setDock('sim')}>模拟观众</button>
-                <span className="dl-meta">{dock === 'owner' ? '观众也会听到她的回答' : '不开直播间也能彩排'}</span>
+                <button className={dock === 'action' ? 'dl-on' : ''} onClick={() => setDock('action')}>舞台动作</button>
+                <span className="dl-meta">{dock === 'owner' ? '观众也会听到她的回答' : dock === 'sim' ? '不开直播间也能彩排' : '给舞台放音乐、横幅、进度条、切场景'}</span>
               </nav>
-              {dock === 'owner' ? <OwnerSay onAir={!!show?.onAir} /> : <Simulator />}
+              {dock === 'owner' ? <OwnerSay onAir={!!show?.onAir} /> : dock === 'sim' ? <Simulator /> : <StageActionsPanel toneUrl={host?.toneUrl} />}
             </section>
           </main>
 
@@ -792,6 +794,43 @@ function Feed({ feed, focus, sleep }: { feed: FeedRow[]; focus: Set<string>; sle
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** 舞台动作调试：把动作事件流里的每类动作推给舞台看效果（不经过她，舞台收到就放/显示） */
+function StageActionsPanel({ toneUrl }: { toneUrl?: string }) {
+  const [busy, error, run] = useBusy();
+  const act = (action: unknown) => run(() => api('action', { action }));
+  const tone = toneUrl ?? '';
+  return (
+    <div className="dl-dock-body">
+      <span className="dl-label">音效 / 音频（舞台真的放出来）</span>
+      <div className="dl-chips">
+        <button disabled={busy || !tone} onClick={() => act({ name: 'play_sfx', src: tone })}>音效：叮</button>
+        <button disabled={busy || !tone} onClick={() => act({ name: 'play_audio', id: 'debug-bgm', src: tone, channel: 'music', loop: true, duckOnTalk: true })}>BGM 循环（说话自动降）</button>
+        <button disabled={busy} onClick={() => act({ name: 'stop_audio', id: 'debug-bgm' })}>停 BGM</button>
+      </div>
+      <span className="dl-label">横幅</span>
+      <div className="dl-chips">
+        <button disabled={busy} onClick={() => act({ name: 'show_banner', id: 'debug-banner', title: '欢迎新观众', text: '点歌、送礼、上舰都可以', ms: 6000 })}>横幅（6 秒后收起）</button>
+        <button disabled={busy} onClick={() => act({ name: 'show_banner', id: 'debug-banner-keep', title: '感谢 大肥鱼 上舰！' })}>横幅（常驻）</button>
+        <button disabled={busy} onClick={() => act({ name: 'dismiss_banner', id: 'debug-banner-keep' })}>收起常驻</button>
+      </div>
+      <span className="dl-label">进度条</span>
+      <div className="dl-chips">
+        <button disabled={busy} onClick={() => act({ name: 'set_progress', id: 'debug-progress', label: '点歌排队', value: 2, total: 5 })}>2 / 5</button>
+        <button disabled={busy} onClick={() => act({ name: 'set_progress', id: 'debug-progress', label: '点歌排队', value: 4, total: 5 })}>→ 4 / 5</button>
+        <button disabled={busy} onClick={() => act({ name: 'clear_progress', id: 'debug-progress' })}>清除</button>
+      </div>
+      <span className="dl-label">场景（舞台布局）</span>
+      <div className="dl-chips">
+        <button disabled={busy} onClick={() => act({ name: 'set_scene', scene: 'chat', label: '聊天' })}>聊天</button>
+        <button disabled={busy} onClick={() => act({ name: 'set_scene', scene: 'video', label: '放视频' })}>视频</button>
+        <button disabled={busy} onClick={() => act({ name: 'set_scene', scene: 'game', label: '玩游戏' })}>游戏</button>
+      </div>
+      <p className="dl-hint">动作直接推给舞台（不经过她），彩排新功能时验证舞台侧渲染。音效用的是本机测试音，正式功能会换成真素材。</p>
+      {error && <p className="dl-error">{error}</p>}
     </div>
   );
 }

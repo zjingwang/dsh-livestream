@@ -9,6 +9,7 @@ import { arrange, type Mode, type Slot } from './layout';
 import type { WidgetType } from './protocol';
 import { assetUrl, connect, preview, unlockAudio } from './store';
 import { Effects } from './effects';
+import { AudioBus, Banners, Progress } from './actions';
 import { AiLabel, Alerts, Board, Character, Chat, Game, Notice, Orders, Reply, Rice, Scene, Status, Subtitle, SUBTITLE_LINGER_MS, Terminal, useLinger, useStage, Video } from './widgets';
 
 const WIDGETS: Record<WidgetType, React.ComponentType<{ options?: Record<string, unknown> }>> = {
@@ -67,9 +68,9 @@ function holePath(s: Slot, cw: number, ch: number): string {
 }
 
 function App() {
-  const { template, needsClick, media, game, line } = useStage();
-  // 玩游戏的时候放视频：视频照放（游戏画面让给视频）
-  const mode: Mode = media ? 'video' : game ? 'game' : 'chat';
+  const { template, needsClick, media, game, line, scene } = useStage();
+  // 显式切过场景（set_scene）就听它的；没切过才由媒体决定布局（玩游戏的时候放视频：视频照放）
+  const mode: Mode = scene ?? (media ? 'video' : game ? 'game' : 'chat');
   const slots = useMemo(() => (template ? arrange(template, mode) : []), [template, mode]);
   // 字幕和终端摆在同一块（看视频、玩游戏的布局）：她说话时（和字幕退场那一会儿）只露字幕，说完换回终端
   const [speaking] = useLinger(line, SUBTITLE_LINGER_MS);
@@ -109,6 +110,9 @@ function App() {
         {slots.map((p) => <Placed key={p.key} p={p} covered={!!speaking && sharesSubtitle(p)} />)}
         <div className="ls-overlay" style={hole}><i className="ls-layer ls-layer-1" /><i className="ls-layer ls-layer-2" /></div>
         <Notice />
+        <AudioBus />
+        <Banners />
+        <Progress />
       </div>
       {needsClick && !preview && (
         <button className="ls-unlock" onClick={unlockAudio}>点一下这里开启声音（OBS 的浏览器源不需要）</button>

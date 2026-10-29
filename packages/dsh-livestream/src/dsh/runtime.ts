@@ -23,6 +23,7 @@ import { Broadcast } from '../body/broadcast';
 import { DmManager } from '../body/dm';
 import { Packs } from '../body/packs';
 import { StageServer } from '../body/server';
+import { StageActions } from '../body/stageActions';
 import { canSpeak, subtitleTimeline, synthesize, type TtsAuth } from '../body/tts';
 import { DEFAULT_VOICE } from '../body/voices';
 import type { DistillLlm } from '../core/memory/distill';
@@ -258,6 +259,9 @@ export const show = new LiveShow(
   },
   { dataDir, names: currentCharacter()?.names ?? [], idleAfterMs: () => settings.idleAfterSec * 1000, pace: () => ownerPace(settings.pace), board: () => settings.boardText, title: () => settings.liveTitle, gameChatGapMs: () => (settings.gameChatGapSec ?? 15) * 1000, blocked: (uid) => settings.blocked.some((b) => b.uid === uid) },
 );
+
+/** 往舞台推动作（play_audio / play_sfx / banner / progress / scene…）：工具、控制台调试面板都用它 */
+export const stageActions = new StageActions(show.stage);
 
 /**
  * 游戏画面上 OBS：窗口画面（Minecraft 摄像机客户端）由 OBS 抓，摆在舞台的游戏位上、垫在舞台下面；

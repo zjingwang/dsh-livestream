@@ -37,6 +37,26 @@ const TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg',
 };
 
+/** 一段 1.6 秒的测试音（调试面板的「音效/音频」按钮用）：660Hz + 990Hz 两声叠，淡入淡出，跨页面都能放 */
+function toneWav(): Buffer {
+  const rate = 22050;
+  const n = Math.floor((rate * 1600) / 1000);
+  const out = Buffer.alloc(44 + n * 2);
+  const head = (off: number, s: string) => out.write(s, off, 'ascii');
+  head(0, 'RIFF'); out.writeUInt32LE(36 + n * 2, 4); head(8, 'WAVE');
+  head(12, 'fmt '); out.writeUInt32LE(16, 16); out.writeUInt16LE(1, 20); out.writeUInt16LE(1, 22);
+  out.writeUInt32LE(rate, 24); out.writeUInt32LE(rate * 2, 28); out.writeUInt16LE(2, 32); out.writeUInt16LE(16, 34);
+  head(36, 'data'); out.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    const t = i / rate;
+    const env = Math.min(1, i / (rate * 0.03)) * Math.min(1, (n - i) / (rate * 0.5));
+    const sample = (Math.sin(2 * Math.PI * 660 * t) * 0.5 + Math.sin(2 * Math.PI * 990 * t) * 0.35) * 0.28 * env;
+    out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(sample * 32767))), 44 + i * 2);
+  }
+  return out;
+}
+const TONE_WAV = toneWav();
+
 export interface StageServerOptions {
   port: number;
   token: string;
@@ -67,6 +87,11 @@ export class StageServer {
 
   get url(): string {
     return `http://127.0.0.1:${this.options.port}/?token=${this.options.token}`;
+  }
+
+  /** 调试用的测试音地址（控制台动作调试面板的「音效/音频」按钮用） */
+  get toneUrl(): string {
+    return `http://127.0.0.1:${this.options.port}/tone.wav?token=${this.options.token}`;
   }
 
   start(): Promise<void> {
@@ -127,6 +152,11 @@ export class StageServer {
     }
     if (path === '/events') return this.events(req, res, url);
     if (path === '/video') return this.video(req, res, url.searchParams.get('id') ?? '');
+    if (path === '/tone.wav') {
+      res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': TONE_WAV.length, 'cache-control': 'max-age=3600' });
+      res.end(TONE_WAV);
+      return;
+    }
     if (path === '/' || path === '/index.html') return this.file(res, join(this.options.packageDir, 'stage', 'index.html'));
     if (path === '/stage.js') return this.file(res, join(this.options.packageDir, 'lib', 'stage.js'));
     if (path === '/stage.css') return this.file(res, join(this.options.packageDir, 'stage', 'stage.css'));

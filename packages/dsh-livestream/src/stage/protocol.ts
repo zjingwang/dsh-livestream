@@ -163,6 +163,31 @@ export type StageLiveEvent =
 /** 大脑现在在干什么：舞台上「正在想…」的提示用 */
 export type BrainState = 'off' | 'listening' | 'thinking' | 'speaking' | 'away';
 
+/**
+ * 舞台动作事件流（v1）：把「舞台上发生的一件事」表达成动作，新功能只加动作类型、舞台侧一次实现。
+ * 唱歌放歌（#2 点歌）、音效（#8）、BGM/场景（#9）、进度条……都挂在这里，不用再改渲染器。
+ * 舞台遇到不认识的 `name` 会静默跳过（旧舞台、新身体也能共处）。
+ */
+export type AudioChannel = 'music' | 'sfx' | 'ambient';
+
+export type StageAction =
+  /** 放一段音频（歌、BGM、氛围音）：id 是这段音频的身份，stop_audio 按它停 */
+  | { name: 'play_audio'; id: string; src: string; channel: AudioChannel; title?: string; loop?: boolean; volume?: number; duckOnTalk?: boolean; from?: number }
+  | { name: 'stop_audio'; id: string }
+  /** 放视频（等价 media play，走 /video 转发和 /media 回执）；stop_video 停下、换回平时的布局 */
+  | { name: 'play_video'; id: string; title: string; up: string; src: string; from: number; until: number }
+  | { name: 'stop_video'; id: string }
+  /** 整屏场景/布局：聊天、放视频、玩游戏；不填自动由媒体决定 */
+  | { name: 'set_scene'; scene: 'chat' | 'video' | 'game'; label?: string }
+  /** 一次性音效（掌声、笑声、叮）；放完就消失 */
+  | { name: 'play_sfx'; src: string; volume?: number }
+  /** 横幅：title 大字 + text 小字，ms 毫秒后自动收起（不填一直挂着，等 dismiss_banner） */
+  | { name: 'show_banner'; id: string; title: string; text?: string; ms?: number }
+  | { name: 'dismiss_banner'; id: string }
+  /** 进度条：value/total（不给 total 就当 0~1）；ms 毫秒后自动消失 */
+  | { name: 'set_progress'; id: string; label?: string; value: number; total?: number; ms?: number }
+  | { name: 'clear_progress'; id: string };
+
 export type StageEvent =
   /** build：舞台页代码的版本（插件更新后变）；连上时先发 */
   | { v: 1; type: 'hello'; character: CharacterManifest; template: TemplateManifest; build?: string; at: number }
@@ -198,5 +223,7 @@ export type StageEvent =
   | { v: 1; type: 'game'; source: GameSource | null; at: number }
   /** 游戏画面上那一行「她在干嘛」（身体在做的事、血量、白天黑夜）；null：没在玩 */
   | { v: 1; type: 'gameStatus'; status: GameStatus | null; at: number }
+  /** 动作：身体/工具往舞台推的一件事（动作事件流）。不认识的 action.name 静默跳过 */
+  | { v: 1; type: 'action'; action: StageAction; at: number }
   /** 模板或角色换了：舞台重新加载 */
   | { v: 1; type: 'reload'; at: number };

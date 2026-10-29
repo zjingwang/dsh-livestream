@@ -20,7 +20,7 @@ import type { GameSource, StageEvent } from '../stage/protocol';
 import { splitByMood } from '../core/moodText';
 import { speakable } from '../core/speakable';
 import { GUEST_VOICE } from '../body/voices';
-import { agentReady, asr, broadcast, cookie, DEFAULT_BOARD, hooks, placeGame, publishBoard, publishNotice, SECRETS, social, takeLive, currentCharacter, currentMoods, dm, packs, prepareSpeech, server, settings, show, updateSettings, type BlockedViewer, type Pace, type Settings } from './runtime';
+import { agentReady, asr, broadcast, cookie, DEFAULT_BOARD, hooks, placeGame, publishBoard, publishNotice, SECRETS, social, stageActions, takeLive, currentCharacter, currentMoods, dm, packs, prepareSpeech, server, settings, show, updateSettings, type BlockedViewer, type Pace, type Settings } from './runtime';
 
 export const name = 'dsh-livestream';
 export const inject = ['connection'];
@@ -48,6 +48,7 @@ function state() {
     broadcast: broadcast.status(),
     settings: { ...settings, stageToken: undefined },
     stageUrl: server.url,
+    toneUrl: server.toneUrl,
     characters: packs.list('characters'),
     templates: packs.list('templates'),
     asr: { available: asr.available },
@@ -371,6 +372,13 @@ export function apply(ctx: HostContext): void {
     show.inject(event);
     return json({ ok: true });
   }, 'simulate');
+
+  // 舞台动作：把 play_audio / play_sfx / banner / progress / scene 等动作推给舞台（控制台调试面板用）
+  route('/api/dsh-livestream/action', ['POST'], async (request) => {
+    const { action } = await body<{ action?: unknown }>(request);
+    if (action === undefined) return fail('缺动作');
+    return stageActions.sendRaw(action) ? json({ ok: true }) : fail('动作不认识或字段不对');
+  }, 'action');
 
   // 控制台的事件流：舞台事件（不带语音）+ 每秒一次状态
   route('/api/dsh-livestream/events', ['GET'], () => {
