@@ -20,6 +20,18 @@
 
 ---
 
+## 本仓库说明（Fork 二开）
+
+> **本仓库是从上游 fork 出来做二次开发的版本，非原版。**
+
+- 上游原版：[`luckui/dsh-livestream`](https://github.com/luckui/dsh-livestream)
+- 本仓库：[`zjingwang/dsh-livestream`](https://github.com/zjingwang/dsh-livestream)
+- 当前状态：在保持上游"大脑/身体分离、DSH 插件、B 站直播"核心架构不变的前提下，聚焦 B 站单平台体验与功能扩展（AI 主播"更像真人"方向：点歌系统、记忆回旋镖、情绪状态机、舞台动作协议等），多平台（抖音/快手）扩展暂缓。
+- 代码许可沿用上游 MIT；角色素材（大肥鱼）许可不变，见下文[许可](#许可)。
+- 改动请遵循 [AGENTS.md](AGENTS.md) 的仓库规范与提交约定。
+
+---
+
 ## 是真的在直播
 
 <p align="center"><img src="docs/live-proof.jpg" alt="左边本机 DSH 里的她，右边 B 站直播间里的她" width="100%"></p>
@@ -72,12 +84,50 @@
 
 ## 安装（开发方式）
 
+插件未发布到 npm，两种本地安装方式任选其一。
+
+### 方式一：本地打包（tgz）安装（推荐）
+
+```bash
+pnpm install
+pnpm -C packages/dsh-livestream build     # 生成 lib/
+pnpm -C packages/dsh-livestream pack      # 生成 packages/dsh-livestream/dsh-livestream-0.0.1.tgz
+```
+
+把生成的 tgz 装进 DSH 的 web profile（`file:` 指向本仓库内的绝对路径，把 `<本仓库路径>` 换成你自己的）：
+
+```bash
+dsh plugin --profile web add file:<本仓库路径>/packages/dsh-livestream/dsh-livestream-0.0.1.tgz
+```
+
+`dsh plugin` 会自动把 `dsh-livestream` 登记进 profile 的 `dsh.profile.bundles` 并写入依赖，随后**重启 DSH**，侧边栏出现「直播」面板。
+
+> 说明：tgz 是快照拷贝。每次改代码后要重新 `build` → `pack` → `add`。
+> 想免打包、边改边生效，可改用 `file:<本仓库路径>/packages/dsh-livestream`（目录符号链接），改代码只需重新 `build` + 重启 DSH。
+
+### 方式二：手动链接 node_modules（上游原方式）
+
 ```bash
 pnpm install
 pnpm -C packages/dsh-livestream build
+ln -s <本仓库路径>/packages/dsh-livestream $DSH_HOME/profiles/web/node_modules/dsh-livestream
 ```
 
-把 `packages/dsh-livestream` 链接到 DSH 主目录的插件目录（例如 `$DSH_HOME/profiles/web/node_modules/dsh-livestream`），重启 DSH。
+手动链接不会自动登记，需在 `$DSH_HOME/profiles/web/package.json` 里手动补两处：
+1. `dependencies` 增加 `"dsh-livestream": "file:<本仓库路径>/packages/dsh-livestream"`
+2. `dsh.profile.bundles` 增加 `"dsh-livestream"`
+
+然后 `pnpm install` 同步 lockfile，重启 DSH。这种方式容易漏登记，不推荐，与方式一不要混用。
+
+### 卸载
+
+```bash
+dsh plugin --profile web remove dsh-livestream
+```
+
+（会自动清掉依赖与 bundles 登记，重启 DSH 后「直播」面板消失。）
+
+### 密钥与环境
 
 密钥写在 DSH 主目录的 `.env`：
 
@@ -89,6 +139,8 @@ DOUBAO_TTS_ACCESS_KEY=...
 ```
 
 然后在 DSH 侧边栏打开「直播」：填房间号，选「本地彩排」或「推流到 B 站」，开播。
+
+> ⚠️ 密钥、cookie、推流码等一律只放 DSH 主目录 `.env`（已被 gitignore 忽略），**不要写进仓库**。提交前按 [AGENTS.md](AGENTS.md) 检查工作区，避免泄露敏感信息。
 
 ## 许可
 

@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# 提交前敏感信息扫描（见 AGENTS.md「敏感信息红线」）
+# 命中疑似密钥/令牌/cookie/私钥即阻止提交；确属误报且人工确认安全后可用 --no-verify 显式绕过。
+
+if git diff --cached | grep -nEi "(api[_-]?key|access[_-]?key|secret|token|password|cookie)[[:space:]]*[:=][[:space:]]*[\"']?[a-z0-9_+/=.\-]{20,}|-----begin [a-z ]*private key-----"; then
+  echo '❌ pre-commit: 检测到疑似敏感信息（密钥/令牌/cookie/私钥），已阻止提交。'
+  echo '   请检查上述命中行，确认无真实密钥后再提交（见 AGENTS.md「敏感信息红线」）。'
+  echo '   确属误报且已人工确认安全时，可显式提交：git commit --no-verify'
+  exit 1
+fi
+exit 0
