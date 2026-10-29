@@ -561,7 +561,7 @@ export function Orders({ options }: { options?: Record<string, unknown> }) {
         <ol>
           {orders.map((o) => (
             <li key={o.id} data-state={o.state}>
-              <span>{o.text}</span>
+              <span>{o.kind === 'song' ? '♪ ' : ''}{o.text}</span>
               <small><b>{o.who}</b><em>{ORDER_MARK[o.state]}</em></small>
             </li>
           ))}

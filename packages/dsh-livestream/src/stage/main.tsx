@@ -9,7 +9,7 @@ import { arrange, type Mode, type Slot } from './layout';
 import type { WidgetType } from './protocol';
 import { assetUrl, connect, preview, unlockAudio } from './store';
 import { Effects } from './effects';
-import { AudioBus, Banners, Progress } from './actions';
+import { AudioBus, Banners, MusicPlayer, Progress } from './actions';
 import { AiLabel, Alerts, Board, Character, Chat, Game, Notice, Orders, Reply, Rice, Scene, Status, Subtitle, SUBTITLE_LINGER_MS, Terminal, useLinger, useStage, Video } from './widgets';
 
 const WIDGETS: Record<WidgetType, React.ComponentType<{ options?: Record<string, unknown> }>> = {
@@ -113,6 +113,7 @@ function App() {
         <AudioBus />
         <Banners />
         <Progress />
+        <MusicPlayer />
       </div>
       {needsClick && !preview && (
         <button className="ls-unlock" onClick={unlockAudio}>点一下这里开启声音（OBS 的浏览器源不需要）</button>

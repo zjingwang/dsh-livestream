@@ -5,8 +5,8 @@
  *   音效 → 一次性 new Audio，放完由 store 撤掉
  *   横幅/进度 → 纯样式，store 定时自动撤
  */
-import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { dropSfx, getState, subscribe } from './store';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { dropSfx, getState, mediaUrl, subscribe } from './store';
 
 /** 她开口时，声明了 duckOnTalk 的 music 通道降到这个音量（听歌时也能听清她说话） */
 export const DUCK_LEVEL = 0.35;
@@ -111,6 +111,57 @@ export function Progress() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 音乐播放器：舞台正在放的歌（set_song/clear_song）。自己持有一个 <audio>（src 走 /video 转发），
+ * 进度条跟着播放位置走；她开口时整首歌降音量（听歌时也能听清她说话）。
+ */
+export function MusicPlayer() {
+  const { song, line } = useStage();
+  const el = useRef<HTMLAudioElement | null>(null);
+  const [pos, setPos] = useState({ t: 0, d: 0 });
+
+  useEffect(() => {
+    if (!song) {
+      if (el.current) {
+        el.current.pause();
+        el.current.removeAttribute('src');
+        el.current.load();
+      }
+      return;
+    }
+    const audio = el.current ?? new Audio();
+    el.current = audio;
+    const onTime = () => setPos({ t: audio.currentTime || 0, d: audio.duration || 0 });
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('loadedmetadata', onTime);
+    audio.volume = line ? DUCK_LEVEL : 1;
+    audio.src = mediaUrl(song.src);
+    if (song.from) audio.currentTime = song.from;
+    void audio.play().catch(() => {});
+    return () => {
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('loadedmetadata', onTime);
+    };
+  }, [song?.id, song?.src]);
+
+  // 她开口了：整首歌降音量；说完恢复
+  useEffect(() => {
+    if (el.current) el.current.volume = line ? DUCK_LEVEL : 1;
+  }, [line]);
+
+  if (!song) return null;
+  const pct = pos.d > 0 ? Math.min(100, Math.max(0, (pos.t / pos.d) * 100)) : 0;
+  return (
+    <div className="ls-music">
+      <div className="ls-music-disc">♪</div>
+      <div className="ls-music-body">
+        <div className="ls-music-title">{song.title}{song.who ? <span className="ls-music-who"> · {song.who} 点</span> : null}</div>
+        <div className="ls-music-track"><div className="ls-music-fill" style={{ width: `${pct}%` }} /></div>
+      </div>
     </div>
   );
 }

@@ -19,7 +19,7 @@ import type { LiveEvent, LiveStatus, LiveUser } from '../core/live';
 import { distillStream, type DistillLlm } from '../core/memory/distill';
 import { LiveMemory } from '../core/memory/memory';
 import { LiveMemoryStore } from '../core/memory/store';
-import { OrderBook, type OrderBookData, type OrderState } from '../core/orders';
+import { OrderBook, type Order, type OrderBookData, type OrderState } from '../core/orders';
 import { cleanName, cleanText } from '../core/safety';
 import { speakable } from '../core/speakable';
 import { topicText } from '../core/topicText';
@@ -27,6 +27,7 @@ import { lookupViewer, type ViewerLookup } from '../core/viewerLookup';
 import type { BrainState, GameSource, GameStatus, StageLiveEvent, StageUser } from '../stage/protocol';
 import { gameStatusOf } from './gameStatus';
 import { Player, type PlayRequest } from './player';
+import { SongPlayer, type SongPlaying, type SongRequest } from './songPlayer';
 import type { VideoNotes } from './watchAlong';
 import { Stage } from './stage';
 
@@ -179,6 +180,10 @@ export class LiveShow {
     this.endWatch(how, playedSec);
     if (this.onAir && !this.ending && !video.answered) this.priority.push({ kind: 'video', title: video.title, how, playedSec });
   });
+  /** 舞台上放歌（点歌/她自放，音乐播放器）：见 body/songPlayer */
+  readonly songPlayer = new SongPlayer(this.stage);
+  /** 正在放的那首歌在点歌队列里的单号（停/换歌时把它标完成） */
+  private songOrderId: number | null = null;
   private attention: LiveAttention;
   private memory: LiveMemory;
   private onAir = false;
@@ -502,7 +507,8 @@ export class LiveShow {
     const chosen = names.length
       ? picks.filter((p) => names.some((n) => p.event.user.name === n || p.event.user.name.includes(n) || n.includes(p.event.user.name)))
       : picks.length === 1 ? picks : [];
-    return chosen.map((p) => this.orders.findOpen(p.event.user.id, p.text) ?? this.orders.add(cleanName(p.event.user.name), cleanText(p.text), now, p.event.user.id || undefined));
+    return chosen.map((p) => this.orders.findOpen(p.event.user.id, p.text) ?? this.orders.add(cleanName(p.event.user.name), cleanText(p.text), now, p.event.user.id || undefined))
+      .filter((o): o is Order => o !== null);
   }
 
   /** 游戏线说的话里写了单子标记：改状态 */
@@ -522,7 +528,7 @@ export class LiveShow {
 
   /** 舞台上的点单栏跟着队列走；改了就存一下（插件重启后接着排） */
   private publishOrders(persist = true): void {
-    this.stage.broadcast({ type: 'orders', items: this.orders.shown().map(({ id, who, text, state }) => ({ id, who, text, state })) });
+    this.stage.broadcast({ type: 'orders', items: this.orders.shown().map(({ id, who, text, state, kind }) => ({ id, who, text, state, kind })) });
     if (persist) this.persistLive();
   }
 
@@ -950,6 +956,43 @@ export class LiveShow {
   stopVideo(how = 'stopped') {
     this.endWatch(how);
     return this.player.stop();
+  }
+
+  /** 舞台上放一首歌（换掉正在放的）；who/uid：点这首歌的人，记进点歌队列（kind=song） */
+  playSong(request: SongRequest, who = '', uid?: string, now = Date.now()): SongPlaying {
+    // 上一首收工：它有单子就标完成
+    if (this.songOrderId !== null) {
+      this.orders.mark(this.songOrderId, 'done', now);
+      this.songOrderId = null;
+    }
+    const song = this.songPlayer.play(request);
+    // 这首歌是观众点的：记一单，标成在做，舞台点歌栏看得到（同一个人最多同时 2 单，队列上限 20）
+    const whoName = who.trim();
+    if (whoName) {
+      const order = this.orders.add(cleanName(whoName), cleanText(request.title), now, uid || undefined, 'song');
+      if (order) {
+        this.orders.mark(order.id, 'doing', now);
+        this.songOrderId = order.id;
+      }
+    }
+    this.publishOrders();
+    return song;
+  }
+
+  /** 停歌：音乐播放器收起来；正在放的那首在点歌队列里标完成 */
+  stopSong(now = Date.now()): SongPlaying | null {
+    const song = this.songPlayer.stop();
+    if (song && this.songOrderId !== null) {
+      this.orders.mark(this.songOrderId, 'done', now);
+      this.songOrderId = null;
+      this.publishOrders();
+    }
+    return song;
+  }
+
+  /** 点歌队列（还没放的歌）一行：bili_music 的 queue 给直播线看 */
+  songQueue(): string {
+    return this.orders.summary('song') || '点歌队列空的。';
   }
 
   /**

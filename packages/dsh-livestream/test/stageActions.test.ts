@@ -34,6 +34,15 @@ describe('cleanAction（外部输入 → 合法动作）', () => {
     expect(cleanAction({ name: 'set_scene', scene: 'party' })).toBeNull();
   });
 
+  it('set_song / clear_song：歌名和转发地址齐全才收', () => {
+    expect(cleanAction({ name: 'set_song', id: 'song:1', title: '晴天', who: '晚风', src: '/video?id=song:1', from: 3 }))
+      .toEqual({ name: 'set_song', id: 'song:1', title: '晴天', who: '晚风', src: '/video?id=song:1', from: 3 });
+    expect(cleanAction({ name: 'set_song', id: 'song:1', title: '晴天' })).toBeNull(); // 缺 src
+    expect(cleanAction({ name: 'set_song', id: 'song:1', src: '/video?id=song:1' })).toBeNull(); // 缺 title
+    expect(cleanAction({ name: 'clear_song', id: 'song:1' })).toEqual({ name: 'clear_song', id: 'song:1' });
+    expect(cleanAction({ name: 'clear_song' })).toBeNull();
+  });
+
   it('show_banner / stop / dismiss / clear 缺 id 不收', () => {
     expect(cleanAction({ name: 'show_banner', id: 'b', title: '欢迎' })).toMatchObject({ title: '欢迎' });
     expect(cleanAction({ name: 'show_banner', title: '欢迎' })).toBeNull();
@@ -57,6 +66,7 @@ describe('cleanAction（外部输入 → 合法动作）', () => {
       { name: 'set_scene', scene: 'chat' }, { name: 'play_sfx', src: 's' },
       { name: 'show_banner', id: 'b', title: 't' }, { name: 'dismiss_banner', id: 'b' },
       { name: 'set_progress', id: 'p', value: 1 }, { name: 'clear_progress', id: 'p' },
+      { name: 'set_song', id: 'song:1', title: '晴天', src: '/video?id=song:1' }, { name: 'clear_song', id: 'song:1' },
     ]) {
       expect(KNOWN_ACTIONS.has(action.name as never), action.name).toBe(true);
       expect(cleanAction(action)).not.toBeNull();
@@ -90,6 +100,15 @@ describe('StageActions（动作分发 → 舞台事件）', () => {
     expect(got.map((e) => (e as { action?: { name: string } }).action?.name)).toEqual(['play_audio', 'set_scene', 'show_banner', 'set_progress', 'play_video']);
     expect(got[0]).toMatchObject({ action: { name: 'play_audio', channel: 'music', loop: true, duckOnTalk: true } });
     expect(got[1]).toMatchObject({ action: { name: 'set_scene', scene: 'video', label: '放视频' } });
+  });
+
+  it('setSong / clearSong 发对动作', () => {
+    const { actions, got } = capture();
+    actions.setSong({ id: 'song:1', title: '晴天', who: '晚风', src: '/video?id=song:1', from: 3 });
+    actions.clearSong('song:1');
+    expect(got.map((e) => (e as { action?: { name: string } }).action?.name)).toEqual(['set_song', 'clear_song']);
+    expect(got[0]).toMatchObject({ action: { name: 'set_song', id: 'song:1', title: '晴天', who: '晚风', src: '/video?id=song:1', from: 3 } });
+    expect(got[1]).toMatchObject({ action: { name: 'clear_song', id: 'song:1' } });
   });
 
   it('sendRaw：合法的广播、非法的忽略且不广播', () => {

@@ -937,3 +937,32 @@ html, body {
   background: linear-gradient(90deg, var(--ls-accent, #f472b6), color-mix(in srgb, var(--ls-accent, #f472b6) 55%, #fff));
   transition: width 0.35s ease; }
 .ls-progress-value { font-size: 13px; font-weight: 600; color: var(--ls-fg, #fff); white-space: nowrap; min-width: 3em; text-align: right; }
+
+/* ── 音乐播放器（点歌：set_song/clear_song）── 左下角小卡，正在放的歌 */
+.ls-music {
+  position: absolute; left: 24px; bottom: 96px; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  max-width: 340px; padding: 10px 16px 10px 12px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(10, 10, 20, 0.72), rgba(20, 14, 32, 0.72));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+}
+.ls-music-disc {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 20px; color: #fff;
+  background: radial-gradient(circle at 32% 28%, #f472b6, #a855f7);
+  animation: ls-music-spin 4s linear infinite;
+}
+@keyframes ls-music-spin { to { transform: rotate(360deg); } }
+.ls-music-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ls-music-title {
+  font-size: 14px; font-weight: 600; color: var(--ls-fg, #fff);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ls-music-who { font-weight: 400; color: rgba(255, 255, 255, 0.66); }
+.ls-music-track { height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.ls-music-fill { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--ls-accent, #f472b6), color-mix(in srgb, var(--ls-accent, #f472b6) 55%, #fff));
+  transition: width 0.3s linear; }

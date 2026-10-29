@@ -362,7 +362,7 @@ describe('order queue: viewers\' requests the game line works through', () => {
     show.toGameLine('把观众1的头像画成像素墙');
     await vi.advanceTimersByTimeAsync(1_000);
     expect(to('game').at(-1)).toContain('记进了点单队列：#1 观众1');
-    expect(shown.at(-1)).toEqual([{ id: 1, who: '观众1', text: '画我的头像', state: 'queued' }]);
+    expect(shown.at(-1)).toMatchObject([{ id: 1, who: '观众1', text: '画我的头像', state: 'queued' }]);
     // 同一件事交两次：不重复记
     show.toGameLine('头像画大一点');
     expect((shown.at(-1) as unknown[]).length).toBe(1);
@@ -384,7 +384,7 @@ describe('order queue: viewers\' requests the game line works through', () => {
     show.inject(chat('2', '盖个光棱塔'));
     await vi.advanceTimersByTimeAsync(3_000);
     show.toGameLine('盖光棱塔', '观众2');
-    expect(shown.at(-1)).toEqual([{ id: 1, who: '观众2', text: '盖个光棱塔', state: 'queued' }]);
+    expect(shown.at(-1)).toMatchObject([{ id: 1, who: '观众2', text: '盖个光棱塔', state: 'queued' }]);
     // 没写是谁的、这件事里又有好几位：不乱记
     show.toGameLine('大家都欢迎');
     expect((shown.at(-1) as unknown[]).length).toBe(1);
@@ -403,7 +403,7 @@ describe('order queue: viewers\' requests the game line works through', () => {
     const snap = first.snaps.at(-1)!;
     first.show.dispose();
     const again = start(snap);
-    expect(again.shown.at(-1)).toEqual([{ id: 1, who: '观众1', text: '画我的头像', state: 'queued' }]);
+    expect(again.shown.at(-1)).toMatchObject([{ id: 1, who: '观众1', text: '画我的头像', state: 'queued' }]);
     again.show.dispose();
   });
 });

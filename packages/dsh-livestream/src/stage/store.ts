@@ -78,6 +78,16 @@ export interface StageProgress {
   total?: number;
 }
 
+/** 音乐播放器里正在放的歌（set_song）；at 是身体开始放的时刻 */
+export interface StageSong {
+  id: string;
+  title: string;
+  who?: string;
+  src: string;
+  from?: number;
+  at: number;
+}
+
 export interface Line {
   id: string;
   text: string;
@@ -190,6 +200,8 @@ export interface StageState {
   progress: Record<string, StageProgress>;
   /** 显式场景（set_scene）：空 = 让媒体自动决定布局 */
   scene: 'chat' | 'video' | 'game' | null;
+  /** 音乐播放器里正在放的歌（set_song）；null：没在放 */
+  song: StageSong | null;
 }
 
 const MAX_CHATS = 30;
@@ -251,7 +263,7 @@ function startUpdating(): void {
 let state: StageState = {
   connected: false, character: null, template: null, brain: 'off', brainDetail: '', line: null, lineEndedAt: 0,
   chats: [], alerts: [], focus: new Set(), reply: [], replySeq: 0, onAir: false, needsClick: false,
-  phase: wasUpdating() ? 'updating' : 'waiting', stats: freshStats(), tokens: 0, model: '', term: [], media: null, board: '', orders: [], notice: '', game: null, gameStatus: null, fx: [], reaction: null, audio: {}, sfx: [], banners: {}, progress: {}, scene: null,
+  phase: wasUpdating() ? 'updating' : 'waiting', stats: freshStats(), tokens: 0, model: '', term: [], media: null, board: '', orders: [], notice: '', game: null, gameStatus: null, fx: [], reaction: null, audio: {}, sfx: [], banners: {}, progress: {}, scene: null, song: null,
 };
 const subscribers = new Set<() => void>();
 
@@ -576,6 +588,10 @@ function onAction(event: Extract<StageEvent, { type: 'action' }>): void {
       return update((s) => ({ ...s, progress: { ...s.progress, [action.id]: { id: action.id, label: action.label, value: action.value, total: action.total } } }));
     case 'clear_progress':
       return update((s) => (action.id in s.progress ? { ...s, progress: withoutKey(s.progress, action.id) } : s));
+    case 'set_song':
+      return update((s) => ({ ...s, song: { id: action.id, title: action.title, ...(action.who ? { who: action.who } : {}), src: action.src, ...(action.from ? { from: action.from } : {}), at: event.at } }));
+    case 'clear_song':
+      return update((s) => (s.song?.id === action.id ? { ...s, song: null } : s));
   }
 }
 

@@ -12,7 +12,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { randomUUID } from 'node:crypto';
 import { fetchProfile, profileSummary, profileText } from '../body/biliProfile';
-import { clock, infoText, searchText, subtitleText, type Subtitles, type VideoInfo, type VideoPart } from '../body/biliVideo';
+import { clock, count, infoText, searchText, subtitleText, type Subtitles, type VideoInfo, type VideoPart } from '../body/biliVideo';
 import { VideoNotes } from '../body/watchAlong';
 import { lookupProblem } from '../core/viewerLookup';
 import { splitByMood } from '../core/moodText';
@@ -820,6 +820,61 @@ ${profileText(profile)}` : '没打开自己的主页（B 站没返回，可能�
       return `停了「${stopped.video.title}」（放了 ${clock(stopped.playedSec)}），舞台换回了聊天的布局。`;
     },
   })), 'stop_video tool');
+
+  // 点歌/放歌：观众弹幕「点歌《XXX》」时搜歌、放歌；歌走舞台音乐播放器（她说话时自动变小声）
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'bili_music',
+    description: '观众点歌、或者你想放歌时用：搜歌（B 站）、把歌放到舞台音乐播放器上播（纯音乐，你说话时自动变小声）、停歌、切下一首、看点歌队列。'
+      + '观众弹幕说「点歌《歌名》」时：先 search 搜到歌名，确认是哪一首后 play 播（点歌的人填进 who，点歌栏会显示）。'
+      + '放歌不影响你说话回弹幕；正在放的歌会被换掉。',
+    parameters: {
+      action: { type: 'string', required: true, description: 'search 搜歌 / play 播歌 / stop 停歌 / next 切下一首 / queue 看点歌队列' },
+      query: { type: 'string', description: '歌名或关键词（search、play 用；play 会再搜一遍取第一首或你指定的 pick）' },
+      pick: { type: 'number', description: 'play 时播搜到的第几首（1 起，默认 1）' },
+      who: { type: 'string', description: '点这首歌的观众名字（play 时填，记进点歌栏）' },
+      uid: { type: 'string', description: '点歌观众的 UID（play 时填，同人限点用）' },
+    },
+    output: stringOut,
+    async execute(args) {
+      const action = typeof args.action === 'string' ? args.action.trim() : '';
+      if (action === 'queue') return show.songQueue();
+      if (action === 'stop') {
+        show.toolCall('bili_music', '停歌');
+        const stopped = show.stopSong();
+        return stopped ? `停了「${stopped.title}」的播放，音乐播放器收起来了。` : '现在没在放歌。';
+      }
+      if (action === 'next') {
+        show.toolCall('bili_music', '切歌');
+        const stopped = show.stopSong();
+        return `${stopped ? `切掉了「${stopped.title}」。` : '现在没在放歌。'}${show.songQueue()}`;
+      }
+      const query = typeof args.query === 'string' ? args.query.trim() : '';
+      if (!query) return '搜歌/播歌要告诉我歌名（query）。';
+      if (action === 'search') {
+        show.toolCall('bili_music', `搜「${query.slice(0, 16)}」`);
+        const result = await videos.search(`${query} 纯音乐`);
+        if (!result?.hits.length) return `搜不到「${query}」的歌（可能没被搬到 B 站），换一首吧。`;
+        return result.hits.slice(0, 6).map((h, i) => `${i + 1}.《${h.title}》UP ${h.up}（${clock(h.durationSec)}${h.views ? `，${count(h.views)}播放` : ''}）`).join('\n')
+          + '\n（相中了就用 bili_music action=play，query 写同一个关键词、pick 写第几首来播）';
+      }
+      if (action === 'play') {
+        show.toolCall('bili_music', `放「${query.slice(0, 16)}」`);
+        const pick = Number(args.pick) > 0 ? Math.floor(Number(args.pick)) - 1 : 0;
+        const result = await videos.search(`${query} 纯音乐`);
+        const hit = result?.hits[pick];
+        if (!hit) return `搜不到「${query}」的歌${result?.hits.length ? `（只有 ${result.hits.length} 首，没有第 ${pick + 1} 首）` : ''}，换一首吧。`;
+        const info = await videos.info({ bvid: hit.bvid });
+        const part = info?.parts?.[0];
+        if (!part) return `「${hit.title}」拿不到播放信息，换一首吧。`;
+        const audio = await videos.audioUrl(hit.bvid, part.cid);
+        if (!audio) return `「${hit.title}」B 站没给能用的音频地址（可能付费、番剧或地区限制），换一首吧。`;
+        const who = typeof args.who === 'string' ? args.who.trim() : '';
+        const song = show.playSong({ bvid: hit.bvid, title: hit.title, ...(who ? { who } : {}), url: audio.url }, who, typeof args.uid === 'string' ? args.uid.trim() : '');
+        return `在放了：${who ? `${who}点` : ''}《${song.title}》${who ? `（点歌人 ${who}，点歌栏里有）` : ''}。你说话时音乐会变小声。想停用 action=stop。`;
+      }
+      return 'bili_music 的 action 要填 search / play / stop / next / queue 之一。';
+    },
+  })), 'bili_music tool');
 
   // 游戏线：另一个会话里的她专门玩游戏，这条线把话交给她
   ctx.effect(() => ctx.tools.register(defineTool({

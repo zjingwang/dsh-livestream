@@ -823,6 +823,11 @@ function StageActionsPanel({ toneUrl }: { toneUrl?: string }) {
         <button disabled={busy} onClick={() => act({ name: 'set_progress', id: 'debug-progress', label: '点歌排队', value: 4, total: 5 })}>→ 4 / 5</button>
         <button disabled={busy} onClick={() => act({ name: 'clear_progress', id: 'debug-progress' })}>清除</button>
       </div>
+      <span className="dl-label">点歌（音乐播放器：她说话时自动降音量）</span>
+      <div className="dl-chips">
+        <button disabled={busy || !tone} onClick={() => act({ name: 'set_song', id: 'debug-song', title: '试听：本机测试音', who: '调试', src: '/tone.wav' })}>放试听歌</button>
+        <button disabled={busy} onClick={() => act({ name: 'clear_song', id: 'debug-song' })}>停歌</button>
+      </div>
       <span className="dl-label">场景（舞台布局）</span>
       <div className="dl-chips">
         <button disabled={busy} onClick={() => act({ name: 'set_scene', scene: 'chat', label: '聊天' })}>聊天</button>

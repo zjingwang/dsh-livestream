@@ -106,12 +106,13 @@ export type EffectSpec = string | { name: string; ms?: number; [option: string]:
  */
 export type WidgetType = 'character' | 'subtitle' | 'chat' | 'alerts' | 'status' | 'ai-label' | 'reply' | 'rice' | 'terminal' | 'scene' | 'video' | 'effects' | 'board' | 'game' | 'orders';
 
-/** 点单栏的一行（见 core/orders） */
+/** 点单栏的一行（见 core/orders）；kind：单子种类（点歌/点菜/游戏…），默认游戏 */
 export interface StageOrder {
   id: number;
   who: string;
   text: string;
   state: 'queued' | 'doing' | 'done' | 'dropped';
+  kind?: 'game' | 'song';
 }
 
 /**
@@ -186,7 +187,10 @@ export type StageAction =
   | { name: 'dismiss_banner'; id: string }
   /** 进度条：value/total（不给 total 就当 0~1）；ms 毫秒后自动消失 */
   | { name: 'set_progress'; id: string; label?: string; value: number; total?: number; ms?: number }
-  | { name: 'clear_progress'; id: string };
+  | { name: 'clear_progress'; id: string }
+  /** 音乐播放器：舞台上正在放的歌（观众点的/她放的）。src 走舞台服务器 /video 转发（带 B 站要的 Referer）；from 从第几秒起 */
+  | { name: 'set_song'; id: string; title: string; who?: string; src: string; from?: number }
+  | { name: 'clear_song'; id: string };
 
 export type StageEvent =
   /** build：舞台页代码的版本（插件更新后变）；连上时先发 */

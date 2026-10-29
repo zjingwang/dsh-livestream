@@ -322,7 +322,7 @@ export const server = new StageServer({
   stage: show.stage,
   current: () => ({ character: settings.character, template: settings.template }),
   media: {
-    source: (id) => show.player.source(id),
+    source: (id) => show.player.source(id) ?? show.songPlayer.source(id),
     report: (id, state, positionSec, detail) => show.player.report(id, state, positionSec, detail),
   },
   log: (level, message) => hooks.log(level, message),

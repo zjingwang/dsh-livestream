@@ -22,6 +22,8 @@ export const KNOWN_ACTIONS = new Set<StageAction['name']>([
   'dismiss_banner',
   'set_progress',
   'clear_progress',
+  'set_song',
+  'clear_song',
 ]);
 
 // —— 字段校验小工具：外来的 JSON 什么都有，先洗一遍再上舞台 ——
@@ -107,6 +109,17 @@ export function cleanAction(input: unknown): StageAction | null {
       const id = str(r.id);
       return id ? { name: 'clear_progress', id: slice(id, 64) } : null;
     }
+    case 'set_song': {
+      const id = str(r.id);
+      const src = str(r.src);
+      const title = str(r.title);
+      if (!id || !src || !title) return null;
+      return { name: 'set_song', id: slice(id, 64), title: slice(title, 80), ...(str(r.who) === undefined ? {} : { who: slice(str(r.who)!, 32) }), src: slice(src, 1024), ...(num(r.from) === undefined ? {} : { from: Math.max(0, num(r.from)!) }) };
+    }
+    case 'clear_song': {
+      const id = str(r.id);
+      return id ? { name: 'clear_song', id: slice(id, 64) } : null;
+    }
     default:
       return null;
   }
@@ -169,5 +182,14 @@ export class StageActions {
 
   clearProgress(id: string): void {
     this.send({ name: 'clear_progress', id });
+  }
+
+  /** 音乐播放器：放一首歌（title 歌名、who 点歌人、src 走 /video 转发、from 从第几秒起） */
+  setSong(input: { id: string; title: string; who?: string; src: string; from?: number }): void {
+    this.send({ name: 'set_song', ...input });
+  }
+
+  clearSong(id: string): void {
+    this.send({ name: 'clear_song', id });
   }
 }
