@@ -853,7 +853,8 @@ ${profileText(profile)}` : '没打开自己的主页（B 站没返回，可能�
       if (action === 'search') {
         show.toolCall('bili_music', `搜「${query.slice(0, 16)}」`);
         const result = await videos.search(`${query} 纯音乐`);
-        if (!result?.hits.length) return `搜不到「${query}」的歌（可能没被搬到 B 站），换一首吧。`;
+        if (result === null) return `B 站现在连不上（网络被墙或接口风控），这首「${query}」暂时搜不了；换首歌试试，或等网络通了再点。`;
+        if (!result.hits.length) return `搜不到「${query}」的歌（B 站上没有），换一首吧。`;
         return result.hits.slice(0, 6).map((h, i) => `${i + 1}.《${h.title}》UP ${h.up}（${clock(h.durationSec)}${h.views ? `，${count(h.views)}播放` : ''}）`).join('\n')
           + '\n（相中了就用 bili_music action=play，query 写同一个关键词、pick 写第几首来播）';
       }
@@ -861,8 +862,9 @@ ${profileText(profile)}` : '没打开自己的主页（B 站没返回，可能�
         show.toolCall('bili_music', `放「${query.slice(0, 16)}」`);
         const pick = Number(args.pick) > 0 ? Math.floor(Number(args.pick)) - 1 : 0;
         const result = await videos.search(`${query} 纯音乐`);
-        const hit = result?.hits[pick];
-        if (!hit) return `搜不到「${query}」的歌${result?.hits.length ? `（只有 ${result.hits.length} 首，没有第 ${pick + 1} 首）` : ''}，换一首吧。`;
+        if (result === null) return `B 站现在连不上，「${query}」放不了；换首歌试试，或等网络通了再点。`;
+        const hit = result.hits[pick];
+        if (!hit) return `搜不到「${query}」的歌${result.hits.length ? `（只有 ${result.hits.length} 首，没有第 ${pick + 1} 首）` : ''}，换一首吧。`;
         const info = await videos.info({ bvid: hit.bvid });
         const part = info?.parts?.[0];
         if (!part) return `「${hit.title}」拿不到播放信息，换一首吧。`;
