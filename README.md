@@ -34,7 +34,10 @@
 
 ## Roadmap
 
-聚焦 B 站单平台、让 AI 主播"更像真人"的改进计划与进度，完整详情（涉及模块/依赖/验收标准）见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+聚焦 B 站单平台、让 AI 主播"更像真人"的改进计划与进度：
+
+- 📋 完整详情（涉及模块/依赖/验收标准）：[docs/ROADMAP.md](docs/ROADMAP.md)
+- 🗂 进度看板（GitHub Projects）：https://github.com/users/zjingwang/projects/2
 
 > 状态：✅ 已完成 · 🚧 进行中 · 📅 计划
 

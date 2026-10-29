@@ -3,6 +3,7 @@
 > 目标：在保持上游"大脑/身体分离、DSH 插件、B 站直播"核心架构不变的前提下，把 AI 主播做得"更像真人"。
 > 多平台（抖音/快手）已暂缓（抖音需 1000 粉才能 PC 直播、AI 无人直播封号风险高），不排期。
 > 所有改动遵循 [AGENTS.md](../AGENTS.md)：通过 `check` + `test`，过 CI，提交符合 Conventional Commits，提交前自查敏感信息。
+> 进度看板（GitHub Projects）：https://github.com/users/zjingwang/projects/2
 
 ## 原则
 
