@@ -9,7 +9,7 @@
  */
 
 import { BiliRoom, sameCover, type Stream } from './biliRoom';
-import { connectObs, prepareObs, startStreaming, stopStreaming, streamHealth, type Obs, type StreamHealth } from './obs';
+import { connectObs, prepareObs, startStreaming, stopStreaming, streamHealth, type Obs, type ObsEncoder, type StreamHealth } from './obs';
 
 export type BroadcastPhase = 'idle' | 'preparing' | 'face' | 'streaming' | 'stopping' | 'error';
 
@@ -35,7 +35,9 @@ export interface BroadcastOptions {
   title(): string | null;
   /** 推流协议：srt（有就用，跨境更稳）还是 rtmp */
   protocol(): 'srt' | 'rtmp';
-  /** 推流码率（kbps） */
+  /** 推流编码：keep（尊重 OBS 里 dsh-livestream 配置文件的设置）或插件管理的 nvenc / x264 */
+  encoder(): ObsEncoder;
+  /** 推流码率（kbps；keep 编码时由 OBS 自己的设置决定） */
   kbps(): number;
   /** 直播间封面（没设就不换）；和直播间现在的封面是同一张就不再传（封面每换一次都要重新审核） */
   cover(): { data: Uint8Array; mime: string } | null;
@@ -94,6 +96,18 @@ export class Broadcast {
     this.set({ roomId });
     this.options.onRoom(roomId);
 
+    // 直播间已经在播（直播姬或另一个 OBS 还开着）：B 站同一路直播间只能有一个推流源，
+    // 直接开 OBS 会和它抢，表现为推上 1-2 秒就被断开重连。先拦住，让主人关掉别的推流
+    try {
+      if ((await room.liveStatus(roomId)) === 1) {
+        throw new Error('直播间已经在直播（直播姬或另一个 OBS 还开着？）：同一路直播间只能有一个推流源，先关掉直播姬 / 停掉别的推流，再点开播');
+      }
+    } catch (err) {
+      if (String((err as Error).message).includes('已经在直播')) throw err;
+      // 查状态没成（网络抖了一下）不拦，继续开播；真撞上由 startStreaming 的重连检测兜底
+      this.options.log?.('warn', `查直播间直播状态没成（不拦，继续开播）：${(err as Error).message}`);
+    }
+
     const pre = await room.preLive();
     const areaId = this.options.areaId() ?? pre.areaId;
     if (!areaId) throw new Error('还没选直播分区');
@@ -112,7 +126,7 @@ export class Broadcast {
       if (this.cancelled) return;
       const result = await room.start(roomId, areaId);
       if (result.kind === 'live') stream = this.options.protocol() === 'srt' && result.srt ? result.srt : result.stream;
-      else if (result.kind === 'verify') throw new Error(`B 站要求先过一次风控验证（${result.message}）：用官方直播姬或 B 站 App 开播一次，之后这里就能开了`);
+      else if (result.kind === 'verify') throw new Error(`B 站风控验证（${result.message}）：这个账号要先在官方客户端过一次验证，才能用接口开播。用官方直播姬或 B 站 App 开播一次（出画面后关掉），再回来点开播`);
       else {
         // 人脸认证：等主人用 B 站 App 扫码，认证过了再开播一次
         this.set({ phase: 'face', step: '等你用 B 站 App 扫码做人脸认证', faceQr: result.qr });
@@ -130,7 +144,7 @@ export class Broadcast {
 
     this.set({ step: '打开 OBS、设好画质' });
     this.obs = await connectObs(true);
-    await prepareObs(this.obs, this.options.stageUrl(), this.options.kbps());
+    await prepareObs(this.obs, this.options.stageUrl(), this.options.kbps(), this.options.encoder());
     this.set({ step: `开始推流（${stream.protocol.toUpperCase()}，${this.options.kbps()} kbps）`, protocol: stream.protocol });
     await startStreaming(this.obs, stream.addr, stream.code);
     this.set({ phase: 'streaming', step: '推流中', startedAt: Date.now() });

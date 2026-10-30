@@ -325,7 +325,12 @@ export async function startStreaming(obs: Obs, addr: string, code: string): Prom
   if (!status.outputActive) await obs.call('StartStream');
   for (let i = 0; i < 20; i++) {
     await sleep(500);
-    if ((await obs.call<{ outputActive: boolean }>('GetStreamStatus')).outputActive) return;
+    const s = await obs.call<{ outputActive: boolean; outputReconnecting: boolean }>('GetStreamStatus');
+    if (s.outputActive) return;
+    // 推上过又被 B 站断开、一直在重连：多半是直播间已经有别的推流（直播姬还开着）在和 OBS 抢
+    if (s.outputReconnecting) {
+      throw new Error('OBS 推流被 B 站反复断开重连：直播间是不是已经有别的推流（直播姬还开着？）——先关掉直播姬，再点开播');
+    }
   }
   throw new Error('OBS 没能开始推流（看 OBS 的日志）');
 }
