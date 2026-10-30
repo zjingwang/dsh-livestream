@@ -10,3 +10,8 @@ packages/*/lib/
 packages/*/test/fixtures/
 tools/*.mjs
 /art/
+
+# 本地 TTS 测试/模型（不入库；正式模型放 DSH_HOME/dsh-livestream/tts-models）
+.tts-test/
+__pycache__/
+*.pyc

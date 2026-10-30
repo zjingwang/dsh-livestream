@@ -1,0 +1,107 @@
+{
+  "_说明": "本地 TTS 模型清单。config/rule 里的路径都相对模型根目录（tts_server.py 的 --dir）。新增模型：加一条，url 指向 sherpa-onnx 官方 release 的 tar.bz2，解压后按实际文件名填 config（坑：不同模型 onnx 文件名不一样，如 bronya.onnx / abyssinvoker.onnx）。",
+  "models": [
+    {
+      "id": "melo",
+      "name": "MeloTTS 女声（44.1kHz 音质最佳）",
+      "kind": "vits",
+      "dir": "vits-melo-tts-zh_en",
+      "archive": "vits-melo-tts-zh_en.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2",
+      "size_mb": 159,
+      "default": true,
+      "config": {
+        "model": "vits-melo-tts-zh_en/model.onnx",
+        "tokens": "vits-melo-tts-zh_en/tokens.txt",
+        "lexicon": "vits-melo-tts-zh_en/lexicon.txt",
+        "dict_dir": "vits-melo-tts-zh_en/dict"
+      },
+      "rule": ["vits-melo-tts-zh_en/phone.fst", "vits-melo-tts-zh_en/date.fst", "vits-melo-tts-zh_en/number.fst"],
+      "speakers": ["女声"]
+    },
+    {
+      "id": "zh-ll",
+      "name": "LL 五音色（素影雪等）",
+      "kind": "vits",
+      "dir": "sherpa-onnx-vits-zh-ll",
+      "archive": "sherpa-onnx-vits-zh-ll.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-vits-zh-ll.tar.bz2",
+      "size_mb": 116,
+      "config": {
+        "model": "sherpa-onnx-vits-zh-ll/model.onnx",
+        "tokens": "sherpa-onnx-vits-zh-ll/tokens.txt",
+        "lexicon": "sherpa-onnx-vits-zh-ll/lexicon.txt",
+        "dict_dir": "sherpa-onnx-vits-zh-ll/dict"
+      },
+      "rule": ["sherpa-onnx-vits-zh-ll/phone.fst", "sherpa-onnx-vits-zh-ll/date.fst", "sherpa-onnx-vits-zh-ll/number.fst"],
+      "speakers": ["素影雪", "古念", "浮世雨", "病娇", "霸总"]
+    },
+    {
+      "id": "matcha",
+      "name": "Matcha 女声（合成最快）",
+      "kind": "matcha",
+      "dir": "matcha-icefall-zh-baker",
+      "archive": "matcha-icefall-zh-baker.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/matcha-icefall-zh-baker.tar.bz2",
+      "size_mb": 72,
+      "config": {
+        "acoustic_model": "matcha-icefall-zh-baker/model-steps-3.onnx",
+        "vocoder": "vocos-22khz-univ.onnx",
+        "tokens": "matcha-icefall-zh-baker/tokens.txt",
+        "lexicon": "matcha-icefall-zh-baker/lexicon.txt"
+      },
+      "rule": ["matcha-icefall-zh-baker/phone.fst", "matcha-icefall-zh-baker/date.fst", "matcha-icefall-zh-baker/number.fst"],
+      "speakers": ["女声"]
+    },
+    {
+      "id": "aishell3",
+      "name": "AISHELL-3 多音色（174 人，8kHz）",
+      "kind": "vits",
+      "dir": "vits-zh-aishell3",
+      "archive": "vits-zh-aishell3.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-aishell3.tar.bz2",
+      "size_mb": 140,
+      "config": {
+        "model": "vits-zh-aishell3/vits-aishell3.onnx",
+        "tokens": "vits-zh-aishell3/tokens.txt",
+        "lexicon": "vits-zh-aishell3/lexicon.txt"
+      },
+      "rule": ["vits-zh-aishell3/phone.fst", "vits-zh-aishell3/date.fst", "vits-zh-aishell3/number.fst"],
+      "speakers": []
+    },
+    {
+      "id": "bronya",
+      "name": "布洛妮娅（角色音）",
+      "kind": "vits",
+      "dir": "vits-zh-hf-bronya",
+      "archive": "vits-zh-hf-bronya.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-hf-bronya.tar.bz2",
+      "size_mb": 115,
+      "config": {
+        "model": "vits-zh-hf-bronya/bronya.onnx",
+        "tokens": "vits-zh-hf-bronya/tokens.txt",
+        "lexicon": "vits-zh-hf-bronya/lexicon.txt",
+        "dict_dir": "vits-zh-hf-bronya/dict"
+      },
+      "rule": ["vits-zh-hf-bronya/phone.fst", "vits-zh-hf-bronya/date.fst", "vits-zh-hf-bronya/number.fst"],
+      "speakers": ["布洛妮娅"]
+    },
+    {
+      "id": "abyssinvoker",
+      "name": "深渊法师（角色音）",
+      "kind": "vits",
+      "dir": "vits-zh-hf-abyssinvoker",
+      "archive": "vits-zh-hf-abyssinvoker.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-hf-abyssinvoker.tar.bz2",
+      "size_mb": 115,
+      "config": {
+        "model": "vits-zh-hf-abyssinvoker/abyssinvoker.onnx",
+        "tokens": "vits-zh-hf-abyssinvoker/tokens.txt",
+        "lexicon": "vits-zh-hf-abyssinvoker/lexicon.txt",
+        "dict_dir": "vits-zh-hf-abyssinvoker/dict"
+      },
+      "rule": ["vits-zh-hf-abyssinvoker/phone.fst", "vits-zh-hf-abyssinvoker/date.fst", "vits-zh-hf-abyssinvoker/number.fst"],
+      "speakers": ["深渊法师"]
+    }
+  ]
+}

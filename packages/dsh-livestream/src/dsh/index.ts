@@ -20,7 +20,8 @@ import type { GameSource, StageEvent } from '../stage/protocol';
 import { splitByMood } from '../core/moodText';
 import { speakable } from '../core/speakable';
 import { GUEST_VOICE } from '../body/voices';
-import { agentReady, asr, broadcast, cookie, DEFAULT_BOARD, hooks, placeGame, publishBoard, publishNotice, SECRETS, social, takeLive, currentCharacter, currentMoods, dm, packs, prepareSpeech, server, settings, show, updateSettings, type BlockedViewer, type Pace, type Settings } from './runtime';
+import { agentReady, asr, broadcast, cookie, DEFAULT_BOARD, hooks, localTts, placeGame, publishBoard, publishNotice, SECRETS, social, takeLive, currentCharacter, currentMoods, dm, packs, prepareSpeech, server, settings, show, updateSettings, type BlockedViewer, type Pace, type Settings } from './runtime';
+import { DEFAULT_TTS_MODEL } from '../body/ttsLocal';
 
 export const name = 'dsh-livestream';
 export const inject = ['connection'];
@@ -175,6 +176,7 @@ export function apply(ctx: HostContext): void {
     return () => { stopped = true; };
   }, 'dsh-livestream resume');
   ctx.effect(() => () => asr.close(), 'dsh-livestream asr');
+  ctx.effect(() => () => localTts.close(), 'dsh-livestream tts');
   // 直播身体：给 dsh-game 用（约定见 docs/game-live-contract.md）。在播时她的话由这里念、游戏画面由这里放上舞台
   ctx.provide('liveBody', {
     get onAir() { return show.isOnAir; },
@@ -205,6 +207,11 @@ export function apply(ctx: HostContext): void {
       next.template = String(patch.template);
     }
     if (patch.voice !== undefined) next.voice = String(patch.voice).trim();
+    if (patch.ttsEngine !== undefined) next.ttsEngine = patch.ttsEngine === 'local' ? 'local' : 'doubao';
+    if (patch.ttsUrl !== undefined) next.ttsUrl = String(patch.ttsUrl).trim() || 'http://127.0.0.1:7491';
+    if (patch.ttsModel !== undefined) next.ttsModel = String(patch.ttsModel).trim() || DEFAULT_TTS_MODEL;
+    if (patch.ttsVoice !== undefined) next.ttsVoice = Math.max(0, Math.floor(Number(patch.ttsVoice) || 0));
+    if (patch.ttsPython !== undefined) next.ttsPython = String(patch.ttsPython).trim().replace(/^"|"$/g, '');
     if (patch.idleAfterSec !== undefined) next.idleAfterSec = Math.max(10, Math.min(600, Number(patch.idleAfterSec) || 45));
     if (patch.gameChatGapSec !== undefined) next.gameChatGapSec = Math.max(5, Math.min(120, Number(patch.gameChatGapSec) || 15));
     if (patch.pace !== undefined) next.pace = cleanPace({ ...settings.pace, ...patch.pace });
@@ -239,6 +246,11 @@ export function apply(ctx: HostContext): void {
     if (next.template && show.gameSource) placeGame(show.gameSource);
     return json(state());
   }, 'settings');
+
+  route('/api/dsh-livestream/tts/start', ['POST'], async () => {
+    const running = await localTts.ensure();
+    return json({ ok: true, running });
+  }, 'tts start');
 
   route('/api/dsh-livestream/connect', ['POST'], async () => {
     if (!settings.roomId) return fail('先填直播间房间号');

@@ -24,6 +24,7 @@ import { DmManager } from '../body/dm';
 import { Packs } from '../body/packs';
 import { StageServer } from '../body/server';
 import { canSpeak, subtitleTimeline, synthesize, type TtsAuth } from '../body/tts';
+import { DEFAULT_TTS_MODEL, LocalTts } from '../body/ttsLocal';
 import { DEFAULT_VOICE } from '../body/voices';
 import type { DistillLlm } from '../core/memory/distill';
 import type { CharacterManifest, GameSource } from '../stage/protocol';
@@ -37,6 +38,16 @@ export interface Settings {
   template: string;
   /** 空串用角色包的默认音色 */
   voice: string;
+  /** 语音引擎：doubao（豆包云）或 local（本地 TTS 服务） */
+  ttsEngine: 'doubao' | 'local';
+  /** 本地 TTS 服务地址（ttsEngine=local 用） */
+  ttsUrl: string;
+  /** 本地 TTS 模型 id（清单里的 id，如 melo） */
+  ttsModel: string;
+  /** 本地 TTS 说话人 sid */
+  ttsVoice: number;
+  /** 装了 sherpa_onnx 的 Python（本地 TTS 服务没跑时自动拉起）；空串=服务手动启动 */
+  ttsPython: string;
   stagePort: number;
   stageToken: string;
   /** 下播提炼观众记忆用的模型（provider/model） */
@@ -155,6 +166,11 @@ function loadSettings(): Settings {
     character: 'dafeiyu',
     template: 'default',
     voice: '',
+    ttsEngine: 'doubao',
+    ttsUrl: 'http://127.0.0.1:7491',
+    ttsModel: DEFAULT_TTS_MODEL,
+    ttsVoice: 0,
+    ttsPython: '',
     stagePort: 7390,
     stageToken: '',
     distillModel: 'deepseek-official/deepseek-flash',
@@ -194,6 +210,18 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   saveSettings(settings);
   return settings;
 }
+
+/** 本地 TTS（独立服务）：ttsEngine=local 时 speech 走它。模型放 <dataDir>/tts-models，不随插件打包 */
+export const localTts = new LocalTts({
+  url: () => settings.ttsUrl,
+  model: () => settings.ttsModel,
+  sid: () => settings.ttsVoice,
+  python: () => settings.ttsPython,
+  script: join(packageDir(), 'assets', 'tts', 'tts_server.py'),
+  manifest: join(packageDir(), 'assets', 'tts', 'tts_models.json'),
+  modelsDir: join(dataDir, 'tts-models'),
+  log: (level, message) => hooks.log(level, message),
+});
 
 /** agent 子插件接上 DSH 的服务后填这里：读机密、调模型 */
 export const hooks: {
@@ -293,6 +321,7 @@ export function publishNotice(): void {
 publishNotice();
 
 async function speech(text: string, signal: AbortSignal, voice = currentVoice()): Promise<{ audio: Uint8Array; timeline: Array<{ chars: number; atMs: number }> } | null> {
+  if (settings.ttsEngine === 'local') return localTts.synthesize(text);
   const auth = await ttsAuth(voice);
   if (!auth) return null;
   const { audio, words } = await synthesize(auth, voice, text, signal);

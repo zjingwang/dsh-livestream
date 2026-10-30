@@ -89,7 +89,7 @@ interface HostState {
   ok: boolean;
   show: ShowStatus;
   broadcast: BroadcastStatus;
-  settings: { roomId: number | null; character: string; template: string; voice: string; stagePort: number; idleAfterSec: number; gameChatGapSec?: number; distillModel: string; ownRooms: number[]; broadcast: boolean; areaId: number | null; liveTitle: string; pushProtocol: 'srt' | 'rtmp'; streamKbps: number; asrPython: string; asrModel: string; boardText: string; noticeText?: string; pace?: { welcomeSec?: number | 'off'; thanksSec?: number; followSec?: number; chatPicks?: number }; blocked?: BlockedViewer[] };
+  settings: { roomId: number | null; character: string; template: string; voice: string; ttsEngine: 'doubao' | 'local'; ttsUrl: string; ttsModel: string; ttsVoice: number; ttsPython: string; stagePort: number; idleAfterSec: number; gameChatGapSec?: number; distillModel: string; ownRooms: number[]; broadcast: boolean; areaId: number | null; liveTitle: string; pushProtocol: 'srt' | 'rtmp'; streamKbps: number; asrPython: string; asrModel: string; boardText: string; noticeText?: string; pace?: { welcomeSec?: number | 'off'; thanksSec?: number; followSec?: number; chatPicks?: number }; blocked?: BlockedViewer[] };
   stageUrl: string;
   characters: PackEntry[];
   templates: PackEntry[];
@@ -540,6 +540,8 @@ export function Console() {
             <SecretField label="豆包语音 API Key" ref_={SECRET_REFS.tts} configured={secrets.tts} hint="火山引擎新版控制台的 API Key（和 dsh-game 共用）" />
             <LoginField />
             <SecretField label="B 站 Cookie（不想扫码时手填）" ref_={SECRET_REFS.cookie} configured={secrets.cookie} hint="浏览器里登录 B 站后复制的 Cookie；扫码登录会自动填这一项" />
+            <h3>本地语音</h3>
+            {settings ? <LocalTtsSection settings={settings} onPatch={choose} /> : null}
             <h3>舞台</h3>
             <div className="dl-field">
               <label>OBS 舞台地址（来源 → 浏览器 → 粘贴，宽 1920 高 1080）</label>
@@ -556,9 +558,122 @@ export function Console() {
   );
 }
 
+interface LocalModelInfo { id: string; name: string; installed: boolean; speakers: string[]; size_mb: number; downloading: boolean; error?: string }
+
+/** 本地语音（TTS 独立服务）：引擎切换、服务状态、模型/音色、下载/删除。模型归服务管，插件只调接口 */
+function LocalTtsSection({ settings, onPatch }: { settings: HostState['settings']; onPatch: (patch: Record<string, unknown>) => void }) {
+  const url = settings.ttsUrl || 'http://127.0.0.1:7491';
+  const [models, setModels] = useState<LocalModelInfo[] | null>(null);
+  const [running, setRunning] = useState<boolean | null>(null);
+  const [voiceCount, setVoiceCount] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // 探测服务 + 拿模型清单；每 4 秒刷一次（下载进度、启动状态都在里面）
+  useEffect(() => {
+    let alive = true;
+    const probe = async () => {
+      try {
+        const h = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1500) });
+        if (!alive) return;
+        setRunning(h.ok);
+        if (h.ok) {
+          const r = await fetch(`${url}/models`, { signal: AbortSignal.timeout(3000) });
+          setModels(r.ok ? ((await r.json()) as LocalModelInfo[]) : []);
+        } else setModels([]);
+      } catch {
+        if (alive) { setRunning(false); setModels([]); }
+      }
+    };
+    void probe();
+    const t = setInterval(() => void probe(), 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [url]);
+
+  // 选了没命名音色的模型（如 AISHELL-3）：拉真实的说话人数
+  const active = models?.find((m) => m.id === settings.ttsModel) ?? null;
+  useEffect(() => {
+    if (!active || active.speakers.length) { setVoiceCount(null); return; }
+    let alive = true;
+    fetch(`${url}/count?model=${encodeURIComponent(active.id)}`, { signal: AbortSignal.timeout(5000) })
+      .then((r) => r.json())
+      .then((d) => { if (alive) setVoiceCount(((d as { count?: number }).count ?? 1)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [url, active]);
+
+  const start = async () => {
+    setBusy(true);
+    try { await api('tts/start', {}); } finally { setBusy(false); }
+  };
+  const download = async (id: string) => {
+    setBusy(true);
+    try {
+      const r = await fetch(`${url}/models/download?id=${encodeURIComponent(id)}`, { method: 'POST' });
+      if (!r.ok) alert(`下载没开始（HTTP ${r.status}）`);
+    } finally { setBusy(false); }
+  };
+  const remove = async (id: string) => {
+    setBusy(true);
+    try { await fetch(`${url}/models/delete?id=${encodeURIComponent(id)}`, { method: 'POST' }); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="dl-field">
+      <label>语音引擎</label>
+      <div className="dl-row">
+        <button className={`dl-switch${settings.ttsEngine === 'doubao' ? ' dl-on' : ''}`} onClick={() => onPatch({ ttsEngine: 'doubao' })}>豆包云</button>
+        <button className={`dl-switch${settings.ttsEngine === 'local' ? ' dl-on' : ''}`} onClick={() => onPatch({ ttsEngine: 'local' })}>本地</button>
+        {running === null
+          ? <span className="dl-meta">在探测本地服务…</span>
+          : running
+            ? <span className="dl-tag dl-ok-tag">本地服务运行中</span>
+            : <span className="dl-tag">本地服务没在跑</span>}
+        {running === false && <button disabled={busy} onClick={start}>启动</button>}
+      </div>
+      {settings.ttsEngine === 'local' && (
+        <>
+          <div className="dl-row">
+            <input defaultValue={settings.ttsUrl} placeholder="http://127.0.0.1:7491" onBlur={(e) => { if (e.target.value.trim() !== settings.ttsUrl) onPatch({ ttsUrl: e.target.value.trim() }); }} />
+            <span className="dl-meta">服务地址</span>
+          </div>
+          <div className="dl-row">
+            <input defaultValue={settings.ttsPython} placeholder="装了 sherpa_onnx 的 python 路径（留空 = 服务手动启动）" onBlur={(e) => onPatch({ ttsPython: e.target.value })} />
+          </div>
+          <label>模型 / 音色</label>
+          {models === null
+            ? <p className="dl-hint">在问本地服务…</p>
+            : models.length === 0
+              ? <p className="dl-hint">连不上本地服务（{url}）。填好上面的地址 / Python 后点「启动」。</p>
+              : (
+                <div className="dl-row">
+                  <select value={settings.ttsModel} onChange={(e) => onPatch({ ttsModel: e.target.value })}>
+                    {models.filter((m) => m.installed).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                  {active && (active.speakers.length
+                    ? <select value={settings.ttsVoice} onChange={(e) => onPatch({ ttsVoice: Number(e.target.value) })}>{active.speakers.map((s, i) => <option key={i} value={i}>{i} {s}</option>)}</select>
+                    : <input type="number" min={0} max={Math.max(0, (voiceCount ?? 1) - 1)} value={settings.ttsVoice} onChange={(e) => onPatch({ ttsVoice: Number(e.target.value) || 0 })} style={{ width: 80 }} />)}
+                  {!active?.speakers.length && voiceCount !== null && <span className="dl-meta">共 {voiceCount} 个</span>}
+                </div>
+              )}
+          <div className="dl-hint">
+            {models?.map((m) => (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span>{m.name}{m.installed ? <span className="dl-tag dl-ok-tag">✓</span> : m.downloading ? <span className="dl-tag">下载中</span> : <span className="dl-tag">未装</span>}</span>
+                {m.installed
+                  ? <button type="button" disabled={busy} onClick={() => void remove(m.id)}>删除</button>
+                  : <button type="button" disabled={busy || m.downloading} onClick={() => void download(m.id)}>{m.downloading ? '下载中…' : `下载 ${m.size_mb}MB`}</button>}
+              </div>
+            ))}
+          </div>
+          <p className="dl-hint">本地引擎：模型由独立服务管，插件只调接口——换模型/重启插件都不重新加载，省启动时间和内存。没装模型的点「下载」即装即用；要更多模型，在插件 <code>assets/tts/tts_models.json</code> 里加一条（指向 sherpa-onnx 官方模型包）。</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** 等推流准备好：推上了返回；出错、取消就抛出（人脸认证最多等 5 分钟，宿主那边会超时） */
-async function waitBroadcast(): Promise<void> {
-  const deadline = Date.now() + 7 * 60_000;
+async function waitBroadcast(): Promise<void> {  const deadline = Date.now() + 7 * 60_000;
   await new Promise((r) => setTimeout(r, 1200));
   while (Date.now() < deadline) {
     const bc = live.broadcast;
