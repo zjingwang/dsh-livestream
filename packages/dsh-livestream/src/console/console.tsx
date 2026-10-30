@@ -89,7 +89,7 @@ interface HostState {
   ok: boolean;
   show: ShowStatus;
   broadcast: BroadcastStatus;
-  settings: { roomId: number | null; character: string; template: string; voice: string; stagePort: number; idleAfterSec: number; gameChatGapSec?: number; distillModel: string; ownRooms: number[]; broadcast: boolean; areaId: number | null; liveTitle: string; pushProtocol: 'srt' | 'rtmp'; streamKbps: number; asrPython: string; asrModel: string; boardText: string; noticeText?: string; pace?: { welcomeSec?: number | 'off'; thanksSec?: number; followSec?: number; chatPicks?: number }; blocked?: BlockedViewer[] };
+  settings: { roomId: number | null; character: string; template: string; voice: string; stagePort: number; idleAfterSec: number; gameChatGapSec?: number; distillModel: string; ownRooms: number[]; broadcast: boolean; areaId: number | null; liveTitle: string; pushProtocol: 'srt' | 'rtmp'; obsEncoder: 'keep' | 'nvenc' | 'x264'; streamKbps: number; asrPython: string; asrModel: string; boardText: string; noticeText?: string; pace?: { welcomeSec?: number | 'off'; thanksSec?: number; followSec?: number; chatPicks?: number }; blocked?: BlockedViewer[] };
   stageUrl: string;
   toneUrl: string;
   characters: PackEntry[];
@@ -485,10 +485,15 @@ export function Console() {
                   <option value="srt">SRT（推荐：跨境、Wi-Fi 更稳）</option>
                   <option value="rtmp">RTMP</option>
                 </select>
-                <input defaultValue={settings?.streamKbps ?? 4500} inputMode="numeric" title="码率 kbps" onBlur={(e) => choose({ streamKbps: Number(e.target.value.replace(/\D/g, '')) || 4500 })} />
+                <select value={settings?.obsEncoder ?? 'keep'} title="OBS 推流编码" onChange={(e) => choose({ obsEncoder: e.target.value })}>
+                  <option value="keep">编码跟随 OBS 现有设置（不覆盖）</option>
+                  <option value="nvenc">NVENC H.264（N 卡，插件管）</option>
+                  <option value="x264">x264（CPU，插件管）</option>
+                </select>
+                <input defaultValue={settings?.streamKbps ?? 4500} inputMode="numeric" title="码率 kbps（编码跟随 OBS 时以 OBS 里的为准）" onBlur={(e) => choose({ streamKbps: Number(e.target.value.replace(/\D/g, '')) || 4500 })} />
                 <span className="dl-meta">kbps</span>
               </div>
-              <p className="dl-hint">开播时：没有直播间会自动开通；B 站要人脸认证时这里弹出二维码，用 B 站 App 扫一下；推流码自动填进 OBS（专用配置「dsh-livestream」，1080p30、NVENC、CBR，RTMP 网络堵时自动降码率），不用手动配 OBS。推流时上面会显示码率和丢帧，丢帧多就换 SRT 或调低码率。</p>
+              <p className="dl-hint">开播时：没有直播间会自动开通；B 站要人脸认证时这里弹出二维码，用 B 站 App 扫一下；推流码自动填进 OBS（专用配置「dsh-livestream」）。编码默认「跟随 OBS 现有设置」：完全用你在 OBS 里给这套配置设的编码和码率，插件不覆盖；要插件管就选 NVENC / x264（1080p30、CBR、关键帧 2 秒）。开播前确认直播姬已经关掉——同一路直播间只能有一个推流源，直播姬开着会和 OBS 抢推流。推流时上面会显示码率和丢帧，丢帧多就换 SRT 或调低码率。</p>
             </div>
             <h3>告示板</h3>
             <BoardField value={settings?.boardText ?? ''} fallback={host?.defaultBoard ?? ''} onSave={(boardText) => choose({ boardText })} />

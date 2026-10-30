@@ -56,7 +56,9 @@ export interface Settings {
   liveTitle: string;
   /** 推流协议：srt（B 站给了就用，跨境、丢包的网络上比 rtmp 稳）或 rtmp */
   pushProtocol: 'srt' | 'rtmp';
-  /** 推流码率（kbps） */
+  /** OBS 推流编码：keep（尊重 OBS 里 dsh-livestream 配置文件的设置，不改动）或插件管理的 nvenc / x264 */
+  obsEncoder: 'keep' | 'nvenc' | 'x264';
+  /** 推流码率（kbps；keep 编码时由 OBS 自己的设置决定） */
   streamKbps: number;
   /** 直播间封面图片的路径（本机文件）；空串不换 */
   liveCover: string;
@@ -166,6 +168,7 @@ function loadSettings(): Settings {
     areaId: null,
     liveTitle: '',
     pushProtocol: 'srt',
+    obsEncoder: 'keep',
     streamKbps: 4500,
     liveCover: '',
     asrPython: '',
@@ -339,6 +342,7 @@ export const broadcast = new Broadcast({
   areaId: () => settings.areaId,
   title: () => settings.liveTitle.trim() || null,
   protocol: () => settings.pushProtocol,
+  encoder: () => settings.obsEncoder,
   kbps: () => settings.streamKbps,
   cover: () => {
     const file = settings.liveCover.trim();

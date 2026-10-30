@@ -1,14 +1,13 @@
 /**
  * OBS（WebSocket v5，OBS 28+ 自带）：专用的配置文件和场景集合「dsh-livestream」，舞台页当浏览器源，推流到 B 站。
  *
- * 画面清不清楚全看编码设置（以前 OBS 简单模式 x264 veryfast 1.4Mbps 糊过）：
- *   - 画布和输出都是 1920×1080，不缩放；舞台页本来就是 1080p
- *   - NVENC H.264 硬件编码，CBR（B 站要恒定码率，码率是设置，默认 4500 kbps），关键帧 2 秒
- *   - RTMP 开「动态码率」：网络堵的时候降码率，不丢帧（实测日本推到 B 站的 RTMP 只有 3 Mbps 左右，丢了三分之二的帧）
- *   - P6 + 高质量调优 + 两遍编码 + 心理视觉 AQ + 2 个 B 帧：码率花在文字和边缘上
- *   - 30 帧：舞台大部分是静的，同样码率 30 帧比 60 帧清楚
- *   - 声音只要舞台页自己的（浏览器源交给 OBS 控制音频），不要麦克风和桌面音频
- * 只动自己这套配置和场景集合，不碰用户别的 OBS 配置。WebSocket 密码从 OBS 自己的配置里读，不打印。
+ * 编码设置不再写死、也不再每次覆盖：编码交给主人决定（设置里的 obsEncoder）——
+ *   - keep（默认）：完全尊重 OBS 里「dsh-livestream」配置文件自己的编码/码率/音质设置，插件不碰
+ *   - nvenc / x264：插件管编码。NVENC H.264 硬件编码、CBR（B 站要恒定码率，码率是设置，默认 4500 kbps）、
+ *     关键帧 2 秒、P6 + 高质量调优 + 两遍编码 + 心理视觉 AQ + 2 个 B 帧（码率花在文字和边缘上）；
+ *     x264 用 veryfast + zerolatency 的 CBR。声音只要舞台页自己的（浏览器源交给 OBS 控制音频）
+ * 无论哪种编码都只动「dsh-livestream」这套配置和场景集合，不碰用户别的 OBS 配置；推流可靠性参数
+ * （断线重连、动态码率）由插件管。WebSocket 密码从 OBS 自己的配置里读，不打印。
  */
 
 import { execFileSync, spawn } from 'node:child_process';
@@ -19,6 +18,49 @@ import { join } from 'node:path';
 export const OBS_NAME = 'dsh-livestream';
 const SCENE = '直播';
 const STAGE_SOURCE = '舞台';
+
+/** OBS 推流编码：keep = 尊重 OBS 里 dsh-livestream 配置文件自己的设置（插件不碰编码）；nvenc / x264 = 插件管理编码 */
+export type ObsEncoder = 'keep' | 'nvenc' | 'x264';
+
+/** 各编码在 OBS 内部的 id（SetProfileParameter AdvOut.Encoder 用的值） */
+export const ENCODER_ID: Record<Exclude<ObsEncoder, 'keep'>, string> = {
+  nvenc: 'obs_nvenc_h264_tex',
+  x264: 'obs_x264',
+};
+
+/** NVENC H.264：CBR、关键帧 2 秒、P6 + 高质量调优 + 两遍编码 + 心理视觉 AQ + 2 个 B 帧 */
+const NVENC_SETTINGS = {
+  rate_control: 'CBR',
+  keyint_sec: 2,
+  preset2: 'p6',
+  tune: 'hq',
+  multipass: 'qres',
+  profile: 'high',
+  bf: 2,
+  lookahead: false,
+  adaptive_quantization: true,
+  psycho_aq: true,
+};
+
+/** x264：CBR、关键帧 2 秒、veryfast + zerolatency（低延迟，推流不掉帧） */
+const X264_SETTINGS = {
+  rate_control: 'CBR',
+  keyint_sec: 2,
+  preset: 'veryfast',
+  tune: 'zerolatency',
+  profile: 'high',
+};
+
+/** 各编码的固定参数（写进配置文件目录的 streamEncoder.json；bitrate 由 kbps 覆盖） */
+const ENCODER_SETTINGS: Record<Exclude<ObsEncoder, 'keep'>, Record<string, unknown>> = {
+  nvenc: NVENC_SETTINGS,
+  x264: X264_SETTINGS,
+};
+
+/** 插件管编码时要写进 streamEncoder.json 的内容（bitrate 用 kbps） */
+export function streamEncoderJson(encoder: Exclude<ObsEncoder, 'keep'>, kbps: number): string {
+  return JSON.stringify({ ...ENCODER_SETTINGS[encoder], bitrate: kbps }, null, 1);
+}
 
 const OBS_DIR = join(process.env.APPDATA ?? '', 'obs-studio');
 /**
@@ -44,21 +86,6 @@ export function findObsExe(): string | null {
   );
   return candidates.find((c) => existsSync(c)) ?? null;
 }
-
-/** 推流编码设置（写进配置文件目录的 streamEncoder.json） */
-const STREAM_ENCODER = {
-  rate_control: 'CBR',
-  bitrate: 4500,
-  keyint_sec: 2,
-  preset2: 'p6',
-  tune: 'hq',
-  multipass: 'qres',
-  profile: 'high',
-  bf: 2,
-  lookahead: false,
-  adaptive_quantization: true,
-  psycho_aq: true,
-};
 
 type Call = <T = any>(requestType: string, requestData?: Record<string, unknown>) => Promise<T>;
 
@@ -150,45 +177,49 @@ function profileDir(name: string): string | null {
 }
 
 /** 切到自己的配置文件和场景集合，设好画质；舞台页当浏览器源 */
-export async function prepareObs(obs: Obs, stageUrl: string, kbps = STREAM_ENCODER.bitrate): Promise<void> {
+export async function prepareObs(obs: Obs, stageUrl: string, kbps = 4500, encoder: ObsEncoder = 'keep'): Promise<void> {
   // 配置文件：画质、声音
   const { profiles, currentProfileName } = await obs.call<{ profiles: string[]; currentProfileName: string }>('GetProfileList');
   if (!profiles.includes(OBS_NAME)) await obs.call('CreateProfile', { profileName: OBS_NAME });
   else if (currentProfileName !== OBS_NAME) await obs.call('SetCurrentProfile', { profileName: OBS_NAME });
   await sleep(800);
+  // 推流可靠性参数：怎么连、断线重连、网络堵降码率——不碰画面和编码（只对 RTMP 生效）
   const params: Array<[string, string, string]> = [
-    ['Output', 'Mode', 'Advanced'],
-    ['AdvOut', 'Encoder', 'obs_nvenc_h264_tex'],
     ['AdvOut', 'UseRescale', 'false'],
     ['AdvOut', 'TrackIndex', '1'],
-    ['AdvOut', 'Track1Bitrate', '192'],
     ['AdvOut', 'ApplyServiceSettings', 'true'],
-    ['Audio', 'SampleRate', '48000'],
-    ['Audio', 'ChannelSetup', 'Stereo'],
     ['Output', 'Reconnect', 'true'],
     ['Output', 'RetryDelay', '2'],
     ['Output', 'MaxRetries', '25'],
-    // 网络堵的时候降码率而不是丢帧（只对 RTMP 生效）
+    // 网络堵的时候降码率而不是丢帧
     ['Output', 'DynamicBitrate', 'true'],
   ];
   for (const [parameterCategory, parameterName, parameterValue] of params) {
     await obs.call('SetProfileParameter', { parameterCategory, parameterName, parameterValue });
   }
   await obs.call('SetVideoSettings', { fpsNumerator: 30, fpsDenominator: 1, baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080 });
-  // 编码器参数在配置文件目录的 streamEncoder.json 里：写好后切走再切回来，让 OBS 重新读
-  const dir = profileDir(OBS_NAME);
-  if (!dir) throw new Error('找不到 OBS 的 dsh-livestream 配置文件目录');
-  const file = join(dir, 'streamEncoder.json');
-  const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  const wanted = JSON.stringify({ ...STREAM_ENCODER, bitrate: kbps }, null, 1);
-  if (current.trim() !== wanted.trim()) {
-    writeFileSync(file, wanted);
-    const other = profiles.find((p) => p !== OBS_NAME);
-    if (other) {
-      await obs.call('SetCurrentProfile', { profileName: other });
-      await sleep(800);
-      await obs.call('SetCurrentProfile', { profileName: OBS_NAME });
-      await sleep(800);
+  // 只有选了「插件管编码」才动编码和音质：keep 就完全尊重 OBS 里 dsh-livestream 配置文件自己的设置
+  if (encoder !== 'keep') {
+    await obs.call('SetProfileParameter', { parameterCategory: 'Output', parameterName: 'Mode', parameterValue: 'Advanced' });
+    await obs.call('SetProfileParameter', { parameterCategory: 'AdvOut', parameterName: 'Encoder', parameterValue: ENCODER_ID[encoder] });
+    await obs.call('SetProfileParameter', { parameterCategory: 'AdvOut', parameterName: 'Track1Bitrate', parameterValue: '192' });
+    await obs.call('SetProfileParameter', { parameterCategory: 'Audio', parameterName: 'SampleRate', parameterValue: '48000' });
+    await obs.call('SetProfileParameter', { parameterCategory: 'Audio', parameterName: 'ChannelSetup', parameterValue: 'Stereo' });
+    // 编码器参数在配置文件目录的 streamEncoder.json 里：写好后切走再切回来，让 OBS 重新读
+    const dir = profileDir(OBS_NAME);
+    if (!dir) throw new Error('找不到 OBS 的 dsh-livestream 配置文件目录');
+    const file = join(dir, 'streamEncoder.json');
+    const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
+    const wanted = streamEncoderJson(encoder, kbps);
+    if (current.trim() !== wanted.trim()) {
+      writeFileSync(file, wanted);
+      const other = profiles.find((p) => p !== OBS_NAME);
+      if (other) {
+        await obs.call('SetCurrentProfile', { profileName: other });
+        await sleep(800);
+        await obs.call('SetCurrentProfile', { profileName: OBS_NAME });
+        await sleep(800);
+      }
     }
   }
 
@@ -300,8 +331,8 @@ export async function startStreaming(obs: Obs, addr: string, code: string): Prom
 }
 
 /** 检查 OBS：设好配置和场景，返回节目画面的一帧（PNG data URL）和当前设置；不推流 */
-export async function checkObs(obs: Obs, stageUrl: string, kbps?: number): Promise<{ image: string; video: unknown; profile: string; collection: string }> {
-  await prepareObs(obs, stageUrl, kbps);
+export async function checkObs(obs: Obs, stageUrl: string, kbps?: number, encoder: ObsEncoder = 'keep'): Promise<{ image: string; video: unknown; profile: string; collection: string }> {
+  await prepareObs(obs, stageUrl, kbps, encoder);
   // 等舞台页加载出来
   await sleep(4000);
   const video = await obs.call('GetVideoSettings');

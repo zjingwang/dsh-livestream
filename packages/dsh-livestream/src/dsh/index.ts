@@ -215,6 +215,7 @@ export function apply(ctx: HostContext): void {
     if (patch.liveTitle !== undefined) next.liveTitle = String(patch.liveTitle).slice(0, 40);
     if (patch.liveCover !== undefined) next.liveCover = String(patch.liveCover).trim().replace(/^"|"$/g, '');
     if (patch.pushProtocol !== undefined) next.pushProtocol = patch.pushProtocol === 'rtmp' ? 'rtmp' : 'srt';
+    if (patch.obsEncoder !== undefined) next.obsEncoder = patch.obsEncoder === 'nvenc' || patch.obsEncoder === 'x264' ? patch.obsEncoder : 'keep';
     if (patch.streamKbps !== undefined) next.streamKbps = Math.max(1000, Math.min(12000, Number(patch.streamKbps) || 4500));
     if (patch.asrPython !== undefined) next.asrPython = String(patch.asrPython).trim().replace(/^"|"$/g, '');
     if (patch.asrModel !== undefined) next.asrModel = String(patch.asrModel).trim() || 'large-v3-turbo';
@@ -293,7 +294,7 @@ export function apply(ctx: HostContext): void {
     try {
       const obs = await connectObs(true);
       try {
-        return json({ ok: true, ...(await checkObs(obs, server.url, settings.streamKbps)) });
+        return json({ ok: true, ...(await checkObs(obs, server.url, settings.streamKbps, settings.obsEncoder)) });
       } finally {
         obs.close();
       }
