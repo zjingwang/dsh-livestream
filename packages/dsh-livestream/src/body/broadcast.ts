@@ -126,11 +126,11 @@ export class Broadcast {
       if (this.cancelled) return;
       const result = await room.start(roomId, areaId);
       if (result.kind === 'live') stream = this.options.protocol() === 'srt' && result.srt ? result.srt : result.stream;
-      else if (result.kind === 'verify') throw new Error(`B 站风控验证（${result.message}）：这个账号要先在官方客户端过一次验证，才能用接口开播。用官方直播姬或 B 站 App 开播一次（出画面后关掉），再回来点开播`);
+      else if (result.kind === 'verify') throw new Error(`B 站要人脸认证但这次没带回二维码（${result.message}）：再点一次开播试试；反复失败就用官方直播姬或 B 站 App 开播一次`);
       else {
-        // 人脸认证：等主人用 B 站 App 扫码，认证过了再开播一次
+        // 人脸认证：等主人用 B 站 App 扫码，认证过了再开播一次（60024 / 60043 同一套流程）
         this.set({ phase: 'face', step: '等你用 B 站 App 扫码做人脸认证', faceQr: result.qr });
-        while (!(await room.faceVerified(roomId))) {
+        while (!(await room.faceVerified(roomId, result.code))) {
           if (this.cancelled) return;
           if (Date.now() > deadline) throw new Error('人脸认证等了 5 分钟还没完成，重新点开播再试');
           await new Promise((r) => setTimeout(r, 2000));

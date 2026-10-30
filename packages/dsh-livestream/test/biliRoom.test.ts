@@ -18,6 +18,46 @@ describe('livehime sign', () => {
   });
 });
 
+describe('start face verification', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('60043 with a qr routes to the face flow, like 60024', async () => {
+    let n = 0;
+    vi.stubGlobal('fetch', async () => {
+      n++;
+      const body = n === 1
+        ? { code: 60043, message: '请使用B站APP扫描二维码完成人脸认证', data: { qr: 'https://passport.bilibili.com/qr?k=abc' } }
+        : { code: 0, message: '', data: { rtmp: { addr: 'rtmp://x/', code: 'k' } } };
+      return new Response(JSON.stringify(body));
+    });
+    const { BiliRoom } = await import('../src/body/biliRoom');
+    const room = new BiliRoom('DedeUserID=1; bili_jct=abc');
+    const first = await room.start(123, 235);
+    expect(first.kind).toBe('face');
+    if (first.kind === 'face') {
+      expect(first.qr).toContain('abc');
+      expect(first.code).toBe(60043);
+    }
+  });
+
+  it('faceVerified polls with the face_auth_code that came back (60043)', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: { body: string }) => {
+      calls.push(init.body);
+      return new Response(JSON.stringify({ code: 0, message: '', data: { is_identified: true } }));
+    });
+    const { BiliRoom } = await import('../src/body/biliRoom');
+    await new BiliRoom('DedeUserID=1; bili_jct=abc').faceVerified(123, 60043);
+    expect(calls[0]).toContain('face_auth_code=60043');
+  });
+
+  it('60043 without a qr falls back to verify', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ code: 60043, message: '风控验证', data: {} })));
+    const { BiliRoom } = await import('../src/body/biliRoom');
+    const res = await new BiliRoom('DedeUserID=1; bili_jct=abc').start(123, 235);
+    expect(res.kind).toBe('verify');
+  });
+});
+
 describe('cover size', () => {
   it('reads JPEG and PNG dimensions without decoding', async () => {
     const { imageSize } = await import('../src/body/biliRoom');

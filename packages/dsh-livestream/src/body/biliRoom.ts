@@ -9,8 +9,10 @@
  *
  * 粉丝少的账号网页上不能开播：按直播姬（pc_link）的身份签名开播，和社区工具 StartLive 的做法一样
  * （github.com/Radekyspec/StartLive；接口说明见 bilibili-API-collect docs/live/manage.md）。
- * 开播返回 60024 时要人脸认证：data.qr 是给主播用 B 站 App 扫的二维码链接；主播扫完、认证过了（IsUserIdentifiedByFaceAuth）再开播一次。
- * 60043 是另一种风控验证（要伪造浏览器行为指纹才能走通），这里不做：请主播用官方直播姬或 B 站 App 开播一次过掉它。
+ * 开播返回 60024 / 60043 都要人脸认证：data.qr 是给主播用 B 站 App 扫的二维码链接；
+ * 扫完、认证过了（IsUserIdentifiedByFaceAuth，face_auth_code 用对应的 code）再开播一次。
+ * 实测（2026-10）60043 的提示同样是"用 B 站 App 扫码做人脸验证"，和 60024 走同一套流程；
+ * 只有当 60043 没带 qr 时才当硬失败兜底报错。
  */
 
 import { createHash } from 'node:crypto';
@@ -31,9 +33,9 @@ export interface Stream {
 export type StartResult =
   /** srt：B 站给了 SRT 推流地址就有（跨境、丢包的网络上比 RTMP 稳） */
   | { kind: 'live'; stream: Stream; srt: Stream | null }
-  /** 要人脸认证：qr 是给 B 站 App 扫的链接 */
-  | { kind: 'face'; qr: string; message: string }
-  /** 风控验证（60043）：要用官方直播姬或 B 站 App 过一次 */
+  /** 要人脸认证：qr 是给 B 站 App 扫的链接，code 是 B 站回的验证码（60024 / 60043），认证完用它再开播 */
+  | { kind: 'face'; qr: string; message: string; code: number }
+  /** 风控验证（60043 没带回二维码时兜底）：要用官方直播姬或 B 站 App 过一次 */
   | { kind: 'verify'; message: string };
 
 /** B 站直播封面的最大宽度（像素） */
@@ -200,15 +202,18 @@ export class BiliRoom {
         srt: srt ? { addr: srt.addr!, code: srt.code!, protocol: 'srt' } : null,
       };
     }
-    if (r.code === 60024 && r.data?.qr) return { kind: 'face', qr: r.data.qr, message: r.message };
+    // 60024 和 60043 都是人脸认证：qr 是给 B 站 App 扫的二维码，扫完验证过了再开播一次
+    if ((r.code === 60024 || r.code === 60043) && r.data?.qr) {
+      return { kind: 'face', qr: r.data.qr, message: r.message, code: r.code };
+    }
     if (r.code === 60043) return { kind: 'verify', message: r.message };
     throw new BiliRoomError(r.code, `开播失败（${r.code}）：${r.message}`);
   }
 
-  /** 主播扫完人脸认证的二维码了没有（60024 那种） */
-  async faceVerified(roomId: number): Promise<boolean> {
+  /** 主播扫完人脸认证的二维码了没有（60024 / 60043 那种） */
+  async faceVerified(roomId: number, code: number): Promise<boolean> {
     const r = await this.call<{ is_identified?: boolean }>('https://api.live.bilibili.com/xlive/app-blink/v1/preLive/IsUserIdentifiedByFaceAuth', {
-      room_id: roomId, face_auth_code: '60024', csrf: this.csrf, csrf_token: this.csrf, visit_id: '',
+      room_id: roomId, face_auth_code: String(code), csrf: this.csrf, csrf_token: this.csrf, visit_id: '',
     });
     return !!r.data?.is_identified;
   }
