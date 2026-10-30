@@ -1,6 +1,6 @@
 # OBS 推流问题修复：编码被写死 + 与直播姬抢推流
 
-> 分支：`fix/obs-stream-bugs` ｜ 对应 GitHub Issue：#（见本文件末尾链接）
+> 分支：`fix/obs-stream-bugs` ｜ 对应 GitHub Issue：[#12 OBS 推流编码写死覆盖配置 + 与直播姬抢推流反复断连（60043）](https://github.com/zjingwang/dsh-livestream/issues/12)
 > 本文按代码逐行定位根因，说明为什么会出现这两个现象，以及这次改了什么。
 
 ---
